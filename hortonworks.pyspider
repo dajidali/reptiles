@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-06-22 10:30:45
+# Project: hortonworks
+
+from pyspider.libs.base_handler import *
+
+class Handler(BaseHandler):
+    count = 0
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('https://community.hortonworks.com/kb/list.html', callback=self.index_page)
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.next > a').items():
+            self.crawl(each.attr.href, callback=self.index_page)
+        return_value = []
+        for each in response.doc('.info').items():
+            Handler.count +=1
+            tag_list = []
+            for tag_dot in each('.tag').items():
+                if tag_list.count(tag_dot.text())<1:
+                    tag_list.append(tag_dot.text())
+            content= {"index":Handler.count,"title":each('.title>a').text(),"url":each('.title>a').attr.href,"tags":tag_list}
+            print(content)
+            return_value.append(content)
+        return return_value
+
+
+    def on_result(self, result):
+        if result is not None:
+            contents = ''
+            for item in result:
+                content = '[' + item['title'] + '](' +  item['url'] + ')'
+                tag_list = []
+                tags = ''
+                for tag in item['tags']:
+                    tags = tags + ' ```' + tag + '```'
+                contents = contents + str(item['index']) + '. ' + content + ' ' + tags + '  \n'
+            with open("contents.txt", "a") as f:
+                f.write(contents)
+                f.close()
