@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-30 13:59:16
+# Project: 22_mechan
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.camer.org.cn/Article_List.aspx?id=2','0220101'],#	行业动态
+            ['http://www.camer.org.cn/Article_List.aspx?id=94','0220102'],#	专题报道
+            ['http://www.camer.org.cn/Association_List.aspx?id=3','0220103'],#	协会通知
+            ['http://www.camer.org.cn/Association_List.aspx?id=14','0220104'],#	协会动态
+            ['http://www.camer.org.cn/Association_List.aspx?id=13','0220105'],#	资质评审
+            ['http://www.camer.org.cn/Article_List.aspx?id=4','0220106'],#	企业专区
+            ['http://www.camer.org.cn/Article_List.aspx?id=8','0220107'],#	市场动态
+            ['http://www.camer.org.cn/EntxhList.aspx?id=150','0220108'],#	推荐企业
+            ['http://www.camer.org.cn/Policy_List.aspx?id=95','0220109'],#	项目申报
+            ['http://www.camer.org.cn/Tech_Cols_List.aspx?id=11&type=all&menu=1','0220110'],#	技术交流
+            ['http://www.camer.org.cn/Tech_Cols_List.aspx?id=16&type=all','0220111'],#	典型案例
+            ['http://www.camer.org.cn/Article_List.aspx?id=11','0220201'],#	再制造产业动态
+            ['http://www.camer.org.cn/UnionInfo_List.aspx?id=21','0220202'],#	再制造技术动态
+            ['http://www.camer.org.cn/Tech_Cols_List.aspx?id=11&type=all','0220301'],#	技术动态
+            ['http://www.camer.org.cn/Tech_Cols_List.aspx?id=12&type=all','0220302']#	专家介绍
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.camer.org.cn/EntxhList.aspx?id=150', callback=self.index_page, save = '0220108')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('#AspNetPager1 a').items():
+            if(not each.attr.href is None):
+                str_page_script = each.attr.href
+                page_no = str_page_script[40:len(str_page_script)-2]
+                self.crawl(response.url + "&__EVENTTARGET=AspNetPager1&__EVENTARGUMENT=" + page_no, callback=self.index_page, save = response.save)
+        for each in response.doc('li > div > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        kind = response.save
+        if(kind!='0220110' and kind!='0220111' and kind!='0220301' and kind!='0220302'):
+            content = response.doc('#list_txt').html()
+        else:
+            content = response.doc('#hy_List').html()
+        url = response.url
+        site = 'http://www.camer.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        title = response.doc('h3 > span').text()
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#list_title_sub > span').text()
+        if(kind=="0220108"):
+            date = time.strptime(date_string[3:13],'%Y-%m-%d')
+        else:
+            date = time.strptime(date_string[0:10],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
