@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-30 09:41:29
+# Project: 21_petro
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cpeia.org.cn/cn/home2/gz_tzgg.shtml','0210101'],#	通知公告
+            ['http://www.cpeia.org.cn/cn/home2/gz_xhdt.shtml','0210102'],#	协会动态
+            ['http://www.cpeia.org.cn/cn/home2/dt_hyzx.shtml','0210201'],#	行业资讯
+            ['http://www.cpeia.org.cn/cn/home2/dt_zcfg.shtml','0210202'],#	政策法规
+            ['http://www.cpeia.org.cn/cn/home2/dt_wzcg.shtml','0210203'],#	物资采购资讯
+            ['http://www.cpeia.org.cn/cn/home2/dt_top50.shtml','0210204'],#	行业五十强和行业名牌
+            ['http://www.cpeia.org.cn/cn/home2/dt_xypj.shtml','0210205'],#	信用评价
+            ['http://www.cpeia.org.cn/cn/home2/zl_gnzl.shtml','0210301'],#	国内展览
+            ['http://www.cpeia.org.cn/cn/home2/zl_jwzl.shtml','0210302'],#	境外展览
+            ['http://www.cpeia.org.cn/cn/home2/zl_jwkc.shtml','0210303'],#	境外考察
+            ['http://www.cpeia.org.cn/cn/home2/zl_ltyth.shtml','0210304'],#	论坛研讨会
+            ['http://www.cpeia.org.cn/cn/home2/zl_zypx.shtml','0210305'],#	专业培训
+        ]                
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])   
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.mainbox a').items():
+            if(each.attr.href[31:32]=='h'):
+                title_and_date=each.text()
+                print(title_and_date)
+                if(title_and_date.rfind(']')==len(title_and_date)-1):
+                    title = title_and_date[0:len(title_and_date)-12]
+                    str_date = title_and_date[title_and_date.rfind('[')+1:len(title_and_date)-1]
+                    if(len(str_date)==10):
+                        date = time.strptime(str_date,'%Y-%m-%d')
+                        date = time.strftime('%Y%m%d',date)
+                    else:
+                        date = str_date
+                    data = {'kind':response.save,'date':date,'title':title}
+                    self.crawl(each.attr.href, callback=self.detail_page,save=data)
+
+
+    @config(priority=2)
+    def detail_page(self, response):
+        data = response.save
+        content = response.doc('.mainbox > div').html()
+        url = response.url
+        site = 'http://www.cpeia.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        title = data['title']
+        date = data['date']
+        kind = data['kind']
+        pagekey = tools.get_md5(title+url)
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+        
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
