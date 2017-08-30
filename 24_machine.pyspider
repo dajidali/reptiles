@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-30 16:23:09
+# Project: 24_machine
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinajx.com.cn/html/category/770-1.htm','240101'],#	要闻动态
+            ['http://www.chinajx.com.cn/html/category/776-1.htm','240102'],#	政策速递
+            ['http://www.chinajx.com.cn/html/category/108450-1.htm','240103'],#	财经时讯
+            ['http://www.chinajx.com.cn/html/category/773-1.htm','240104'],#	行业瞭望
+            ['http://www.chinajx.com.cn/html/category/111333-1.htm','240105'],#	市场趋势
+            ['http://www.chinajx.com.cn/html/category/327594-1.htm.htm','240106'],#	相关产业
+            ['http://www.chinajx.com.cn/html/category/772-1.htm','240107'],#	企业报道
+            ['http://www.chinajx.com.cn/html/category/771-1.htm','240108'],#	数据解析
+            ['http://www.chinajx.com.cn/html/category/108448-1.htm','240109'],#	海外扫描            
+            ['http://www.chinajx.com.cn/html/category/158248-1.htm','240110'],#	产品世界
+            
+            ['http://www.chinajx.com.cn/html/folder/109353-1.htm','240201'],#	前沿视点
+            ['http://www.chinajx.com.cn/html/folder/109358-1.htm','240202'],#	公司经略
+            ['http://www.chinajx.com.cn/html/folder/109365-1.htm','240203'],#	运营实务
+            ['http://www.chinajx.com.cn/html/folder/110286-1.htm','240204'],#	企业家
+            ['http://www.chinajx.com.cn/html/folder/109371-1.htm','240205'],#	经理学堂
+            ['http://www.chinajx.com.cn/html/category/110284-1.htm','240206'],#	浪淘沙
+            ['http://www.chinajx.com.cn/html/category/110285-1.htm','240207'],#	曝光镜
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.chinajx.com.cn/html/category/110285-1.htm', callback=self.index_page, save = '0240101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('#PageNum > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.NewsLi #ReportIDname > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.DetailsTop > #ReportIDname').text()
+        content = response.doc('#ReportIDtext').html()
+        url = response.url
+        site = 'http://www.chinajx.com.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#ReportIDIssueTime').text()
+
+        date = time.strptime(date_string,'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)        
