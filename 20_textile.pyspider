@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-29 09:13:25
+# Project: 20_textile
+
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cttu.org/hyzx/newsCategoryId=9&FrontNews_list01-1450237879886_pageNo=1&FrontNews_list01-1450237879886_pageSize=100000.html',      '0200101'], # 行业资讯
+            ['http://www.cttu.org/hyzh/newsCategoryId=4&FrontNews_list01-1450238542357_pageNo=2&FrontNews_list01-1450238542357_pageSize=100000.html',    '0200102'], # 行业展会
+            ['http://www.cttu.org/hyhd/newsCategoryId=9&FrontNews_list01-1450239094907_pageNo=1&FrontNews_list01-1450239094907_pageSize=100000.html',          '0200103'], # 行业活动
+            ['http://www.cttu.org/xhfw/&FrontNews_list01-1450239380999_pageNo=2&FrontNews_list01-1450239380999_pageSize=100000.html','0200104'], # 协会服务
+       ]        
+        #for each in urls:
+        #    self.crawl('http://www.cec.org.cn/guihuayutongji/dianligaige/', callback=self.index_page, save=each[1])
+        self.crawl('http://www.cttu.org/hyhd/newsCategoryId=9&FrontNews_list01-1450239094907_pageNo=1&FrontNews_list01-1450239094907_pageSize=100000.html', callback=self.index_page, save='0200103')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('h3 > a').items():
+            javascript_string = each.attr.href  #demo:javascript:setVisited('855','http://mp.weixin.qq.com/s?__biz=MjM5NzI5NjM2Mw==&mid=2650881170&idx=1&sn=1316225ec079ece7d8ca6e1a2bc9a808&chksm=bd29bd168a5e3400fb8db166efee0d33e31b1023b15a6988ccdcafec82e7ca19637ad498c64d#rd','_self')
+            #有三种格式的detail
+            if(javascript_string.find('http')==-1):
+                begin_location = 0
+            else:
+                begin_location = javascript_string.find('http')
+
+            if(javascript_string.find('_self')==-1):
+                end_location = len(javascript_string)
+            else:
+                end_location = javascript_string.find('_self')-3
+
+            self.crawl(javascript_string[begin_location:end_location], callback=self.detail_page, save=response.save)
+
+
+    @config(priority=2)
+    def detail_page(self, response):
+        kind = response.save
+        url = response.url
+        if(url.find('weixin')>-1):
+            content = response.doc('#page-content').html()
+            site = 'http://www.cec.org.cn/'
+            content_dom = tools.ext_cont(url, content)
+            title = response.doc('.rich_media_title').text()
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('#post-date').text()
+            date = time.strptime(date_string,'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)
+        else:
+            content = response.doc('.FrontNews_detail01-d1_c1 > div').html()
+            url = response.url
+            site = 'http://www.cec.org.cn/'
+            content_dom = tools.ext_cont(url, content)
+            title = response.doc('h2').text()
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('.message > span').text()
+            date = time.strptime(date_string[4:date_string.find('日 ')+1],'%Y年%m月%d日')
+            date = time.strftime('%Y%m%d',date)
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
