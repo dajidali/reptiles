@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-24 09:20:10
+# Project: 18_electronic
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cec.org.cn/guihuayutongji/dianligaige/',      '0180101'], # 电力改革
+            ['http://www.cec.org.cn/guihuayutongji/gongzuodongtai/',    '0180102'], # 工作动态
+            ['http://intl.cec.org.cn/dongtai/',                  '0180201'], # 本部动态
+            ['http://intl.cec.org.cn/guojijiaoliu/xingyedongtai/',      '0180202'], # 国际交流
+            ['http://intl.cec.org.cn/guojijiaoliu/hezuoxiangmu/',      '0180203'], # 海外项目
+            ['http://wailian.cec.org.cn/dongtai/',                '0180301'], # 工作动态
+            ['http://wailian.cec.org.cn/huiyuanfuwu/',              '0180302'], # 会员服务
+            ['http://wailian.cec.org.cn/qiyewenhua/',               '0180303'], # 企业文化
+            ['http://huanzi.cec.org.cn/dongtai/',                 '0180401'], # 工作动态
+            ['http://www.cec.org.cn/huanbao/zhuanjiaguandian/',        '0180402'], # 专家观点
+            ['http://dls.cec.org.cn/dongtai/',                   '0180501'], # 标准化动态
+            ['http://chinaer.cec.org.cn/kekaoxing/',               '0180601'], # 工作动态
+            ['http://epsi.cec.org.cn/tongzhi/',                  '0180701'], # 通知公告
+            ['http://epsi.cec.org.cn/jinengjianding/',              '0180702'],	# 最新动态 
+            ['http://ceppca.cec.org.cn/zaojiayudinge/',             '0180801'], # 工作动态
+            ['http://www.cec.org.cn/dianlihuizhanzhongxin/jingneizhan/',  '0180901'], # 境内展
+            ['http://expo.cec.org.cn/jingwaizhan/',                '0180902'], # 境外展
+            ['http://expo.cec.org.cn/dongtai/',                   '0180903'], # 最新动态
+            ['http://expo.cec.org.cn/shichangzhuizong/',             '0180904'], # 市场追踪
+            ['http://kjfw.cec.org.cn/dongtai/',                   '0181001'], # 中心动态
+            ['http://kjfw.cec.org.cn/kejizixun/',                  '0181002'], # 科技资讯
+            ['http://kjfw.cec.org.cn/dianlixinxihua/',              '0181003'],	# 电力信息化
+            ['http://kjfw.cec.org.cn/fadianjishu/',                '0181004'], # 发电技术
+            ['http://kjfw.cec.org.cn/dianwangjishu/',               '0181005'],	# 电网技术
+            ['http://kjfw.cec.org.cn/jiandingtongbao/jiandingtongbao/',   '0181006'], # 鉴定通报
+            ['http://kjfw.cec.org.cn/tixirenzheng/',                '0181007'],	# 体系认证动态
+            ['http://kjfw.cec.org.cn/xinyongpingjia/',               '0181008'], # 信用评价动态
+            ['http://kjfw.cec.org.cn/chanpinrenzhengdt/',             '0181009'] # 产品认证动态
+        ]        
+        for each in urls:
+            self.crawl('http://www.cec.org.cn/guihuayutongji/dianligaige/', callback=self.index_page, save=each[1])
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('div.gjzz_nr_lb a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save=response.save)
+        for each in response.doc('div.parre > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save=response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        content = response.doc('div.dl_text').html()
+        url = response.url
+        site = 'http://www.cec.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        title = response.doc('div.dl_text_bt_sp > h3').text()
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('div.dl_text_bt > span').text()
+
+        date = time.strptime(date_string[4:14],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
