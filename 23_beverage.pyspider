@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-30 15:59:01
+# Project: 23_beverage
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinabeverage.org/list.php?t_type=11','230101'],#	行业要闻
+            ['http://www.chinabeverage.org/list.php?t_type=12','230102'],#	行业动态
+            ['http://www.chinabeverage.org/list.php?t_type=13','230103'],#	协会动态
+            ['http://www.chinabeverage.org/list.php?t_type=18','230104'],#	饮料安全与健康
+            ['http://www.chinabeverage.org/list.php?t_type=14','230105'],#	聚焦CBST
+            ['http://www.chinabeverage.org/list.php?t_type=15','230106'],#	标准法规
+            ['http://www.chinabeverage.org/list.php?t_type=20','230107'],#	饮料产业链
+            ['http://www.chinabeverage.org/list.php?t_type=17','230108'],#	科技动态
+            ['http://www.chinabeverage.org/list.php?t_type=16','230109']#	关注社会
+        ]        
+        #for each in urls:
+        #    self.crawl(each[0], callback=self.index_page, save=each[1])
+        self.crawl('http://www.chinabeverage.org/list.php?t_type=16', callback=self.index_page, save='0230101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.ac-pannel-03 a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save=response.save)
+        for each in response.doc('span > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save=response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.STYLE20').text()
+        content = response.doc('td td td > table td').eq(4).html()
+        url = response.url
+        site = 'http://www.chinabeverage.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('div td > span').text()
+
+        date = time.strptime(date_string[3:13],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
