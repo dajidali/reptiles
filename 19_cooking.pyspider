@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-25 09:11:25
+# Project: 19_cooking
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.ccas.com.cn/Article/List_12.html','190101'],#	协会动态
+            ['http://www.ccas.com.cn/Article/List_13.html','190102'],#	行业资讯
+            ['http://www.ccas.com.cn/Article/List_52.html','190201'],#	法规
+            ['http://www.ccas.com.cn/Article/List_53.html','190202'],#	行规
+            ['http://www.ccas.com.cn/Article/List_54.html','190203'],#	标准
+            ['http://www.ccas.com.cn/Article/List_138.html','190204'],#	政策资讯
+            ['http://www.ccas.com.cn/Article/List_46.html','190301'],#	数据统计
+            ['http://www.ccas.com.cn/Article/List_47.html','190302'],#	行业分析
+            ['http://www.ccas.com.cn/Article/List_45.html','190303'],#	专题调查
+            ['http://www.ccas.com.cn/Article/List_48.html','190304'],#	行业信用
+            ['http://www.ccas.com.cn/Article/List_125.html','190401'],#	品牌认定
+            ['http://www.ccas.com.cn/Article/List_126.html','190402'],#	品牌展厅
+            ['http://www.ccas.com.cn/Article/List_127.html','190403'],#	品牌论坛
+            ['http://www.ccas.com.cn/Article/List_128.html','190404'],#	老字号
+            ['http://www.ccas.com.cn/Article/List_30.html','190501'],#	会员资讯
+            ['http://www.ccas.com.cn/Article/List_65.html','190601'],#	快餐资讯
+            ['http://www.ccas.com.cn/Article/List_71.html','190602'],#	西餐资讯
+            ['http://www.ccas.com.cn/Article/List_79.html','190603'],#	清真资讯
+            ['http://www.ccas.com.cn/Article/List_85.html','190604'],#	火锅资讯
+            ['http://www.ccas.com.cn/Article/List_89.html','190605'],#	美食营养
+            ['http://www.ccas.com.cn/Article/List_40.html','190701']#	国际交流
+        ]                
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])   
+        #self.crawl('http://www.ccas.com.cn/Article/List_12.html', callback=self.index_page, save='0190101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.showpage > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save=response.save)
+        for each in response.doc('td td td > .a_d').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save=response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        content = response.doc('td.a_d3').html()
+        url = response.url
+        site = 'http://www.cec.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        title = response.doc('.lan16').text()
+        date_string = response.doc('td td td').eq(10).text()
+
+        first_space_location = date_string.find(' ')
+        date = time.strptime(date_string[0:first_space_location],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+
+        if(isinstance(response.save,str)):
+            # print("第一页")
+            return_value = {
+                "pagekey": tools.get_md5(title+url),
+                "url": url,
+                "site": site,
+                "title": title,
+                "content_dom":content_dom,
+                "cdate": date,
+                "kind":response.save
+            }
+        else:
+            # print("不是第一页")
+            return_value = {
+                "pagekey": response.save['pagekey'],
+                "url": response.save['url'],
+                "site": site,
+                "title": response.save['title'],
+                "content_dom":response.save['content_dom'] + content_dom,
+                "cdate": date,
+                "kind":response.save['kind']
+            }
+        
+        
+        for each in response.doc('#aa a').items():
+            if(each.text()=='下一页'):
+                self.crawl(each.attr.href, callback=self.detail_page, save=return_value)
+
+        return return_value
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
