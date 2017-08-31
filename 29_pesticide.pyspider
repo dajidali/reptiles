@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-31 13:39:02
+# Project: 29_pesticide
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.ccpia.org.cn/hyxw/index.jhtml','0290101'],#	行业新闻
+            ['http://www.ccpia.org.cn/xhdt/index.jhtml','0290102'],#	协会动态
+            ['http://www.ccpia.org.cn/zfxx/index.jhtml','0290103'],#	政府信息
+            ['http://www.ccpia.org.cn/nycxgxj/index.jhtml','0290201'],#	农药创新贡献奖
+            ['http://www.ccpia.org.cn/hse/index.jhtml','0290202'],#	HSE合规企业
+            ['http://www.ccpia.org.cn/xydjpj/index.jhtml','0290203'],#	信用等级评价
+            ['http://www.ccpia.org.cn/nyhybq/index.jhtml','0290204'],#	农业行业百强
+            ['http://www.ccpia.org.cn/nyhyzj50/index.jhtml','0290205'],#	农药行业制剂50强
+            ['http://www.ccpia.org.cn/cxpp/index.jhtml','0290206'],#	农药行业畅销品牌
+            ['http://www.ccpia.org.cn/nycke/index.jhtml','0290207'],#	中国农药出口额30强
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.ccpia.org.cn/nycke/index.jhtml', callback=self.index_page, save = '0290101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.pagesite a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.db_list > li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h3').text()
+        content = response.doc('.center-box1').html()
+        url = response.url
+        site = 'http://www.ccpia.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.msgbar').text()
+
+        date = time.strptime(date_string[6:16],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)  
