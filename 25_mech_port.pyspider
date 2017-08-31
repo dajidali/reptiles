@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-31 09:43:28
+# Project: 25_mech_port
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cccme.org.cn/news/channel-409---1.aspx','250101'],#	宏观经济
+            ['http://www.cccme.org.cn/news/channel-6---1.aspx','250102'],#	统计数据
+            ['http://www.cccme.org.cn/news/channel-7---1.aspx','250103'],#	调研分析
+            ['http://www.cccme.org.cn/news/channel-39---1.aspx','250104'],#	市场动态
+            ['http://www.cccme.org.cn/news/channel-40---1.aspx','250105'],#	贸易摩擦
+            ['http://www.cccme.org.cn/news/channel-43---1.aspx','250106'],#	政策法规
+            ['http://www.cccme.org.cn/news/channel-406---1.aspx','250107'],#	企业动态
+            ['http://www.cccme.org.cn/news/channel-41---1.aspx','250108'],#	展会动态
+            ['http://www.cccme.org.cn/news/channel-413---1.aspx','250109'],#	投资促进
+            ['http://www.cccme.org.cn/news/channel-49---1.aspx','250110'],#	商会动态
+            ['http://www.cccme.org.cn/news/channel-48---1.aspx','250111'],#	通知公告
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.cccme.org.cn/news/channel-48---1.aspx', callback=self.index_page, save = '0250101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.MZ_Pages > a').items():
+            self.crawl(each.attr.href, callback=self.index_page ,save = response.save)
+        for each in response.doc('ul a').items():
+            self.crawl(each.attr.href, callback=self.detail_page ,save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.t-center').text()
+        content = response.doc('.p-bottom-30').html()
+        url = response.url
+        site = 'http://www.cccme.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.p-bottom-30 > .m-bottom-20').text()
+
+        date = time.strptime(date_string[len(date_string)-19:len(date_string)-9],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)        
