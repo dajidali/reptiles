@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-31 11:20:32
+# Project: 27_logist
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinawuliu.com.cn/zixun/class_1.shtml','0270101'],#	宏观经济
+            ['http://www.chinawuliu.com.cn/zixun/class_2.shtml','0270102'],#	产业安全
+            ['http://www.chinawuliu.com.cn/zixun/class_3.shtml','0270103'],#	综合物流
+            ['http://www.chinawuliu.com.cn/zixun/class_4.shtml','0270104'],#	陆运
+            ['http://www.chinawuliu.com.cn/zixun/class_5.shtml','0270105'],#	空运
+            ['http://www.chinawuliu.com.cn/zixun/class_6.shtml','0270106'],#	水运
+            ['http://www.chinawuliu.com.cn/zixun/class_7.shtml','0270107'],#	企业
+            ['http://www.chinawuliu.com.cn/zixun/class_8.shtml','0270108'],#	物流信息化
+            ['http://www.chinawuliu.com.cn/zixun/class_9.shtml','0270109'],#	物流装备
+            ['http://www.chinawuliu.com.cn/zixun/class_10.shtml','0270110'],#	仓储配送
+            ['http://www.chinawuliu.com.cn/zixun/class_11.shtml','0270111'],#	快递
+            ['http://www.chinawuliu.com.cn/zixun/class_12.shtml','0270112'],#	产业分析
+            ['http://www.chinawuliu.com.cn/zixun/class_13.shtml','0270113'],#	供应链
+            ['http://www.chinawuliu.com.cn/zixun/class_14.shtml','0270114'],#	国际物流
+            ['http://www.chinawuliu.com.cn/zixun/class_15.shtml','0270115'],#	采购
+            ['http://www.chinawuliu.com.cn/zixun/class_16.shtml','0270116'],#	生产资料流通
+            ['http://www.chinawuliu.com.cn/zixun/class_17.shtml','0270117'],#	地方物流
+            ['http://www.chinawuliu.com.cn/zixun/class_18.shtml','0270118'],#	会展信息
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.chinawuliu.com.cn/zixun/class_1.shtml', callback=self.index_page, save = '270101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.yfTabContent dd > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.yfTabContent li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.main1_L6 dt').text()
+        content = response.doc('.main1_L1').html()
+        url = response.url
+        site = 'http://www.chinawuliu.com.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('dd').text()
+
+        date = time.strptime(date_string[10:21],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)  
