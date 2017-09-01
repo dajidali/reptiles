@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-09-01 09:00:08
+# Project: 31_meat
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinameat.org/index.php?a=list&id=7','310101'],#	部委协会
+            ['http://www.chinameat.org/index.php?a=list&id=8','310102'],#	协会信息
+            ['http://www.chinameat.org/index.php?a=list&id=9','310103'],#	行业新闻
+            ['http://www.chinameat.org/index.php?a=list&id=17','310201'],#	专家在线
+            ['http://www.chinameat.org/index.php?a=list&id=16','310202'],#	案例分析
+            ['http://www.chinameat.org/index.php?a=list&id=12','310203'],#	法规资讯
+            ['http://www.chinameat.org/index.php?a=list&id=15','310204'],#	违法曝光
+            ['http://www.chinameat.org/index.php?a=list&id=23','310301'],#	内食加工
+            ['http://www.chinameat.org/index.php?a=list&id=24','310302'],#	包装材料
+            ['http://www.chinameat.org/index.php?a=list&id=19','310303'],#	饲料
+            ['http://www.chinameat.org/index.php?a=list&id=20','310304'],#	养殖
+            ['http://www.chinameat.org/index.php?a=list&id=21','310305'],#	屠宰
+            ['http://www.chinameat.org/index.php?a=list&id=26','310306'],#	天然肠衣
+            ['http://www.chinameat.org/index.php?a=list&id=27','310307'],#	生化制品
+            ['http://www.chinameat.org/index.php?a=list&id=25','310308'],#	冷链运输
+            ['http://www.chinameat.org/index.php?a=list&id=41','310401'],#	重大活动
+            ['http://www.chinameat.org/index.php?a=list&id=34','310402'],#	食品安全
+            ['http://www.chinameat.org/index.php?a=list&id=40','310403'],#	品牌展示
+            ['http://www.chinameat.org/index.php?a=list&id=25','310404'],#	食品认证
+            ['http://www.chinameat.org/index.php?a=list&id=33','310405'],#	精英风采
+            ['http://www.chinameat.org/index.php?a=list&id=36','310406'],#	科技技术
+            ['http://www.chinameat.org/index.php?a=list&id=35','310407'],#	行业自律
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])        
+        
+        #self.crawl('http://www.chinameat.org/index.php?a=list&id=7', callback=self.index_page, save = '0310101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.frontpage a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        for each in response.doc('.right dd > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.biaoti').text()
+        content = response.doc('.conneirong').html()
+        url = response.url
+        site = 'http://www.chinameat.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.content > .info').text()
+
+        date = time.strptime(date_string[len(date_string)-10:len(date_string)],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
