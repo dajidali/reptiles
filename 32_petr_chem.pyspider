@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-09-01 13:53:09
+# Project: 32_petr_chem
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cpcia.org.cn/html/13/news_page1.html','0320101'], #行业要闻
+            ['http://www.cpcia.org.cn/html/16/news_page1.html','0320102'], #经济运行
+            ['http://www.cpcia.org.cn/html/19/news_page1.html','0320103'], #国际新闻
+            ['http://www.cpcia.org.cn/news/index.asp?atype=127','0320104'],#企业动态
+            ['http://www.cpcia.org.cn/news/index.asp?atype=8','0320201'],  #质量管理
+            ['http://www.cpcia.org.cn/html/46/news_page1.html','0320202'], #名牌培育
+            ['http://www.cpcia.org.cn/html/22/news_page1.html','0320203'], #安全生产
+            ['http://www.cpcia.org.cn/html/21/news_page1.html','0320204'], #环境保护
+            ['http://www.cpcia.org.cn/html/21/news3_page1.html','0320205'] #责任关怀
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])        
+        
+        #self.crawl('http://www.cpcia.org.cn/news/index.asp?atype=127', callback=self.index_page, save = '0320101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        if(response.save[0:5]=='03201'):
+            for each in response.doc('.page_info > a').items():
+                self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+            for each in response.doc('.page_list a').items():
+                self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        elif(response.save[0:5]=='03202'):
+            for each in response.doc('.titlef12').items():
+                self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+            for each in response.doc('#ss a').items():
+                self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+            
+    @config(priority=2)
+    def detail_page(self, response):
+        if(response.save[0:5]=='03201'):
+            title = response.doc('.title').text()
+            content = response.doc('.content').html()
+            url = response.url
+            site = 'http://www.cpcia.org.cn/'
+            content_dom = tools.ext_cont(url, content)
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('.source').text()
+            date = time.strptime(date_string[4:len(date_string)],'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)        
+            kind = response.save
+        elif(response.save[0:5]=='03202'):
+            title = response.doc('.title').text()
+            content = response.doc('.content').html()
+            url = response.url
+            site = 'http://www.cpcia.org.cn/'
+            content_dom = tools.ext_cont(url, content)
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('div > span > span').text()
+            date = time.strptime(date_string,'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)        
+            kind = response.save
+
+            
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
