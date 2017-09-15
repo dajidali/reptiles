@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-04 01:39:18
+# Project: china_fruit
+
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    def on_start(self):
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101117_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140101'},connect_timeout = 50, timeout = 200 ) #要闻
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101110_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140201'},connect_timeout = 50, timeout = 200  ) #协会动态
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101111_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140301'} ,connect_timeout = 50, timeout = 200 ) #产业政策
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101104_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140401'} ,connect_timeout = 70, timeout = 300 ) #市场行情
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101105_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140501'} ,connect_timeout = 50, timeout = 200 ) #视点观察
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101112_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140601'},connect_timeout = 50, timeout = 200  ) #现代流通
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101113_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140701'} ,connect_timeout = 50, timeout = 200 ) #冷链加工
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101114_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140801'},connect_timeout = 50, timeout = 200  ) #国际贸易
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101115_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '140901'},connect_timeout = 50, timeout = 200  ) #果品健康
+        self.crawl('http://www.china-fruit.com.cn/Article1/l_101107_1.html',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '141001'} ,connect_timeout = 50, timeout = 200 ) #质量安全
+        
+
+
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #调用detail_page函数
+        for each in response.doc('dt > a').items():
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.detail_page,connect_timeout = 70, timeout = 300)  
+        #翻页
+        for each in response.doc('form > a').items(): 
+                #if ('disabled' not in str(each)):
+                    url=each.attr.href
+                    #将参数crkind赋值给此页面
+                    bits = list(parse.urlparse(url))
+                    qs = parse.parse_qs(bits[4])
+                    qs['crkind']=qs1['crkind']
+                    bits[4] = parse.urlencode(qs, True)
+                    url = parse.urlunparse(bits)
+                    self.crawl(url, fetch_type='js', callback=self.phantomjs_parser,connect_timeout = 70, timeout = 300)  
+       
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.china-fruit.com.cn/"
+        url = response.url
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        title = response.doc('.clearfix > h1').text()
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.t1000-art-list-left > .clearfix').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        date=response.doc('.clearfix > h2').text()
+        #date=info.split('发表日期：')[1]
+        for i in range(0,9) :
+            if ( date[i] == '-'):
+                continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
+
