@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-03 19:09:31
+# Project: chinanzxh
+
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-03 18:57:30
+# Project: ctma2
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    def on_start(self):
+       
+        #新闻资讯
+        self.crawl('http://www.chinanzxh.com/index.php?m=special&c=index&a=speciallist&siteid',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '040203'} ) #专题报道
+        
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #调用detail_page函数
+        for each in response.doc('.xwnr > a').items():
+            url=each.attr.href
+            #将参数crkind赋值给此页面
+            bits = list(parse.urlparse(url))
+            qs = parse.parse_qs(bits[4])
+            qs['crkind']=qs1['crkind']
+            bits[4] = parse.urlencode(qs, True)
+            url = parse.urlunparse(bits)
+            self.crawl(url, fetch_type='js', callback=self.detail_page)  
+              
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.chinanzxh.com/"
+        url = response.url
+        title = response.doc('.title').text()
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.content > div').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        date=response.doc('.sj').text()
+        for i in range(0,10) :
+            if ( date[i] == '-'):
+                 continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        print(result)
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
+
