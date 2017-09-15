@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-04 02:04:28
+# Project: shdwl
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    def on_start(self):
+        #协会动态
+        self.crawl('http://www.shdwl.cn/xhxw/xhgzdt/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150101'} ) #协会工作动态
+        #信评公示
+        self.crawl('http://www.shdwl.cn/xhgz/xypj/xpgs/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150201'} ) #信评公示
+        #调用装备
+        self.crawl('http://www.shdwl.cn/dyzb/qyc/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150301'} ) #牵引车
+        self.crawl('http://www.shdwl.cn/dyzb/yyqgc/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150302'} ) #液压全挂车
+        self.crawl('http://www.shdwl.cn/dyzb/bgc/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150303'} ) #半挂车
+        self.crawl('http://www.shdwl.cn/dyzb/qsl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150304'} ) #桥式梁
+        self.crawl('http://www.shdwl.cn/dyzb/fzgj/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150305'} ) #辅助工具
+        self.crawl('http://www.shdwl.cn/dyzb/xcpxjs/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150306'} ) #新产品、新技术
+        #招标信息	
+        self.crawl('http://www.shdwl.cn/zbxx/gcxmzb/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150401'} ) #工程项目招标
+        self.crawl('http://www.shdwl.cn/zbxx/sbzb/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150402'} ) #设备招标
+        self.crawl('http://www.shdwl.cn/zbxx/djyszb/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150403'} ) #大件运输招标
+        self.crawl('http://www.shdwl.cn/qygl/qyaqgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150404'} ) #企业安全管理
+        self.crawl('http://www.shdwl.cn/zbxx/gqxx/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150405'} ) #供求信息
+       	#企业管理	
+        self.crawl('http://www.shdwl.cn/qygl/qyzzgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150501'} ) #企业组织管理
+        self.crawl('http://www.shdwl.cn/qygl/qyscgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150502'} ) #企业生产管理
+        self.crawl('http://www.shdwl.cn/qygl/qyzlgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150503'} ) #企业质量管理
+        self.crawl('http://www.shdwl.cn/qygl/qyaqgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150504'} ) #企业安全管理
+        self.crawl('http://www.shdwl.cn/qygl/qysbgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150505'} ) #企业设备管理
+        self.crawl('http://www.shdwl.cn/qygl/qycwgl/',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '150506'} ) #企业财务管理
+        
+
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #调用detail_page函数
+        for each in response.doc('.f14 a').items():
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.detail_page)  
+        #翻页
+        for each in response.doc('.page-list > a').items(): 
+                if ('Total record' not in str(each)):
+                    url=each.attr.href
+                    #将参数crkind赋值给此页面
+                    bits = list(parse.urlparse(url))
+                    qs = parse.parse_qs(bits[4])
+                    qs['crkind']=qs1['crkind']
+                    bits[4] = parse.urlencode(qs, True)
+                    url = parse.urlunparse(bits)
+                    self.crawl(url, fetch_type='js', callback=self.phantomjs_parser)  
+       
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.shdwl.cn/"
+        url = response.url
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        title = response.doc('.news-detail > h2').text()
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.news-detail > .f14').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        info=response.doc('h3').text()
+        date=info.split('发布日期：')[1]
+        for i in range(0,9) :
+            if ( date[i] == '-'):
+                continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
+
