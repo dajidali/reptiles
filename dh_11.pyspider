@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-04 01:13:31
+# Project: cava
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+
+
+class Handler(BaseHandler):
+    def on_start(self):
+        self.crawl('http://www.cava.org.cn/scxh/hydt/index.jhtml',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '110101'} ) #行业动态
+        self.crawl('http://www.cava.org.cn/scxh/scfx/index.jhtml',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '110201'} ) #市场分析
+        self.crawl('http://www.cava.org.cn/scxh/spaq/index.jhtml',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '110301'} ) #食品安全
+        self.crawl('http://www.cava.org.cn/scxh/pfsc/index.jhtml',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '110401'} ) #批发市场
+
+
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #调用detail_page函数
+        for each in response.doc('.tablelist li > a').items():
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.detail_page)  
+        #翻页
+        for each in response.doc('ul > div > a').items(): 
+                if ('disabled' not in str(each)):
+                    url=each.attr.href
+                    #将参数crkind赋值给此页面
+                    bits = list(parse.urlparse(url))
+                    qs = parse.parse_qs(bits[4])
+                    qs['crkind']=qs1['crkind']
+                    bits[4] = parse.urlencode(qs, True)
+                    url = parse.urlunparse(bits)
+                    self.crawl(url, fetch_type='js', callback=self.phantomjs_parser)  
+       
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.cava.org.cn/"
+        url = response.url
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        title = response.doc('.newstitle').text()
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.titlenews').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        info=response.doc('.newsword').text()
+        date=info.split('发表日期：')[1]
+        for i in range(0,9) :
+            if ( date[i] == '-'):
+                continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
+
