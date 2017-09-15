@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-04 02:52:27
+# Project: cumetal
+	
+	
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    def on_start(self):
+        #公告信息
+        self.crawl('http://www.cumetal.org.cn/page/newsarray.aspx?lmdm=gsgg',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170101'} ) #公司公告
+        #新闻信息
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=tjqy',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170201'} )#推荐企业
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=wsqqy',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170202'} )#五十强企业
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=xhdt',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170203'} )#协会动态
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=hyxx',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170204'} )#会员信息
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=gtds',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170205'} )#电商专委会
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=hyjj',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170206'} )#行业聚集
+        self.crawl('http://www.cumetal.org.cn/Page/newsarray.aspx?lmdm=gjgc',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '170207'} )#国际观察
+        
+        
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #调用detail_page函数
+        for each in response.doc('#ctl00_ContentPlaceHolder1_pagedata .text a').items():
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.detail_page)  
+        #翻页
+        for each in response.doc('#ctl00_ContentPlaceHolder1_webpage a').items(): 
+                if ('Total record' not in str(each)):
+                    url=each.attr.href
+                    #将参数crkind赋值给此页面
+                    bits = list(parse.urlparse(url))
+                    qs = parse.parse_qs(bits[4])
+                    qs['crkind']=qs1['crkind']
+                    bits[4] = parse.urlencode(qs, True)
+                    url = parse.urlunparse(bits)
+                    self.crawl(url, fetch_type='js', callback=self.phantomjs_parser)  
+       
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.cumetal.org.cn/index.aspx"
+        url = response.url
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        title = response.doc('.Zjx_Right03 h1').text()
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.Zjx_Right03 > div > div').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        date=response.doc('.title > span').text()
+        for i in range(0,9) :
+            if ( date[i] in ['年','月','日']):
+                continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
+
