@@ -1,0 +1,103 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-01 09:15:49
+# Project: cnwood
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        #新闻资讯
+        self.crawl('http://www.cnwood.org/a/xinwenzixun/xiehuiyaowen/',callback=self.index_page ,params={'crkind': '010101'} )
+        self.crawl('http://www.cnwood.org/a/xinwenzixun/zhengfuxinxi/',callback=self.index_page ,params={'crkind': '010102'} )
+        self.crawl('http://www.cnwood.org/a/xinwenzixun/hangyezixun/',callback=self.index_page ,params={'crkind': '010103'} )
+        self.crawl('http://www.cnwood.org/a/xinwenzixun/guojishiye/',callback=self.index_page ,params={'crkind': '010104'} )
+        self.crawl('http://www.cnwood.org/a/xinwenzixun/huizhanxinxi/',callback=self.index_page ,params={'crkind': '010105'} )
+        #品牌推介
+        self.crawl('http://www.cnwood.org/a/pinpaituijie/xinyongqiye/',callback=self.index_page,params={'crkind': '010201'} )
+        self.crawl('http://www.cnwood.org/a/pinpaituijie/dengjiqiye/',callback=self.index_page,params={'crkind': '010202'} )
+        self.crawl('http://www.cnwood.org/a/pinpaituijie/pinpaiqiye/',callback=self.index_page ,params={'crkind': '010203'} )
+        self.crawl('http://www.cnwood.org/a/pinpaituijie/xianjinxiehui/',callback=self.index_page ,params={'crkind': '010204'} )
+        self.crawl('http://www.cnwood.org/a/pinpaituijie/xianjingeren/',callback=self.index_page ,params={'crkind': '010205'} )
+        
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        #翻页
+        for each in response.doc('.dede_pages > a').items():
+            url=each.attr.href
+            #将参数crkind赋值给此页面
+            bits = list(parse.urlparse(url))
+            qs = parse.parse_qs(bits[4])
+            qs['crkind']=qs1['crkind']
+            bits[4] = parse.urlencode(qs, True)
+            url = parse.urlunparse(bits)
+            self.crawl(url, callback=self.index_page)
+            
+        #调用detail_page函数
+        for each in response.doc('.nr2 a').items():
+            url=each.attr.href
+            #将参数crkind赋值给此页面
+            bits = list(parse.urlparse(url))
+            qs = parse.parse_qs(bits[4])
+            qs['crkind']=qs1['crkind']
+            bits[4] = parse.urlencode(qs, True)
+            url = parse.urlunparse(bits)
+            self.crawl(url, callback=self.detail_page)            
+        
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://www.cnwood.org"
+        url = response.url
+        title = response.doc('h1').text()
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        pagekey = tools.get_md5(title+url)
+        content = response.doc('.nr9').html()
+        content_dom = tools.ext_cont(url, content)
+        #获取cdate
+        i=0
+        cdate=''
+        date=response.doc('.nr9 > div').text()
+        for i in range(5,15) :
+            if ( date[i] == '-'):
+                 continue
+            cdate=cdate+date[i]
+            i+=1
+        
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+        
+        
+        
+        
+        
+        
+        
+        
+        
