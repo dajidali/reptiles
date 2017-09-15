@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-08-03 22:53:12
+# Project: crmca
+
+from pyspider.libs.base_handler import *
+from pyspider.database.mysql.mysqldb import MySql
+import pyspider.libs.xxtools as tools
+import urllib
+from urllib import parse
+
+class Handler(BaseHandler):
+    def on_start(self):
+        self.crawl('http://crmca.org.cn/cptj.asp',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '060301'} ) #产品推荐
+        self.crawl('http://crmca.org.cn/tielu.asp',callback=self.phantomjs_parser , fetch_type='js' ,params={'crkind': '060601'} ) #铁路科技
+                
+    @config(age=0)
+    def phantomjs_parser(self, response):
+        qs1 = parse.parse_qs(list(parse.urlparse(response.url))[4])#从上个页面获取参数crkind
+        print(qs1)
+        #调用detail_page函数
+        for each in response.doc('strong > a').items():
+            url=each.attr.href
+            #将参数crkind赋值给此页面
+            bits = list(parse.urlparse(url))
+            qs = parse.parse_qs(bits[4])
+            qs['crkind']=qs1['crkind']
+            bits[4] = parse.urlencode(qs, True)
+            url = parse.urlunparse(bits)
+            self.crawl(url, fetch_type='js', callback=self.detail_page) 
+        
+        if(str(qs['crkind'])=='[\'060301\']'):
+             #翻页
+            for each in response.doc('body > table:nth-child(7) > tbody > tr > td:nth-child(2) > table:nth-child(4) > tbody > tr > td > table > tbody > tr:nth-child(20) > td > a').items(): 
+                #if (each not in response.doc('.a1').items()):
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.phantomjs_parser)  
+        else:
+             for each in response.doc('body > table:nth-child(7) > tbody > tr > td:nth-child(2) > table:nth-child(4) > tbody > tr > td > table > tbody > tr:nth-child(12) > td > a:nth-child(4)').items(): 
+                #if (each not in response.doc('.a1').items()):
+                url=each.attr.href
+                #将参数crkind赋值给此页面
+                bits = list(parse.urlparse(url))
+                qs = parse.parse_qs(bits[4])
+                qs['crkind']=qs1['crkind']
+                bits[4] = parse.urlencode(qs, True)
+                url = parse.urlunparse(bits)
+                self.crawl(url, fetch_type='js', callback=self.phantomjs_parser)  
+   
+    @config(priority=2)
+    def detail_page(self, response):
+        site = "'http://crmca.org.cn/index.asp"
+        url = response.url
+        qs = parse.parse_qs(list(parse.urlparse(url))[4])     #从url参数字典分割出crkind的值,注意删掉'['和'''
+        kind=str(qs['crkind']).strip("]").strip("[").strip("\'")   
+        title = response.doc('.f18 > strong').text()
+        pagekey = tools.get_md5(title+url)
+        if(kind=='060601'):
+            content = response.doc('td > table').html()
+            #获取cdate
+            i=0
+            cdate=''
+            info=response.doc('td > font').text()
+            date=info.split('添加时间：')[1]
+            for i in range(0,9) :
+                if ( date[i] == '/'):
+                     continue
+                cdate=cdate+date[i]
+                i+=1
+        else:
+            content = response.doc('body > table:nth-child(7) > tbody > tr > td:nth-child(2)').html() 
+            cdate=''
+        content_dom = tools.ext_cont(url, content)
+        return {
+               "pagekey": pagekey,
+               "site": site,
+               "url": url,
+               "title":title,
+               "kind": kind,
+               "content":content,
+               "content_dom":content_dom,
+               "cdate":cdate
+              }    
+
+    
+    def on_result(self, result):
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)
+
+
