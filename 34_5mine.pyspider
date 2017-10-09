@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-09-01 15:58:46
+# Project: 34_5mine
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cccmc.org.cn/xyzx/syhg/index.htm','0340101'],#	石油化工
+            ['http://www.cccmc.org.cn/xyzx/jzkc/index.htm','0340102'],#	金属矿产
+            ['http://www.cccmc.org.cn/xyzx/wjjc/index.htm','0340103'],#	五金建材
+            ['http://www.cccmc.org.cn/xyzx/zbsp/index.htm','0340104'],#	招标商品
+            ['http://www.cccmc.org.cn/flfw/kytz/index.htm','0340201'],#	会议通知
+            ['http://www.cccmc.org.cn/flfw/ystz/index.htm','0340202'],#	应诉通知
+            ['http://www.cccmc.org.cn/flfw/qktb/index.htm','0340203'],#	情况通报
+            ['http://www.cccmc.org.cn/jdjs/ckjd/ck_jddt/index.htm','0340301'],#	基地动态
+            ['http://www.cccmc.org.cn/jdjs/ckjd/ck_jdjk/index.htm','0340302'],#	基地简况
+            ['http://www.cccmc.org.cn/pptj/pp_tzgg/index.htm','0340401'],#	通知公告
+            ['http://www.cccmc.org.cn/pptj/pp_zcfb/index.htm','0340402'],#	政策发布
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])        
+            
+        #self.crawl('http://www.cccmc.org.cn/tzgg/index.htm', callback=self.index_page, save='0340101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.clearfix > li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.art > h3').text()
+        content = response.doc('.art_c').html()
+        url = response.url
+        site = 'http://www.cccmc.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.art_r > span').text()
+
+        date = time.strptime(date_string[len(date_string)-10:],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)     
