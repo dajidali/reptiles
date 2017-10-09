@@ -31,7 +31,7 @@ class Handler(BaseHandler):
         for each in urls:
             self.crawl(each[0], callback=self.index_page, save=each[1])               
 
-            self.crawl('http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=1', callback=self.index_page, save='0360101')
+        #self.crawl('http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=1', callback=self.index_page, save='0360101')
 
     @config(age=10 * 24 * 60 * 60)
     def index_page(self, response):
@@ -49,8 +49,6 @@ class Handler(BaseHandler):
         content_dom = tools.ext_cont(url, content)
         pagekey = tools.get_md5(title+url)
         date_string = response.doc('.from_info').text()
-        print(date_string)
-        print(date_string[date_string.find('更新时间')+5:date_string.rfind('字体')-2])
         date = time.strptime(date_string[date_string.find('更新时间')+5:date_string.rfind('字体')-2],'%Y-%m-%d')
         date = time.strftime('%Y%m%d',date)        
         kind = response.save
