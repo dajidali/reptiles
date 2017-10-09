@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-09 16:25:09
+# Project: 36_ferment
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=1','0360101'],#通知通告
+            ['http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=2','0360102'],#协会工作
+            ['http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=3','0360103'],#业界新闻
+            ['http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=58','0360104'],#重要信息
+            ['http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=61','0360105'],#对外交流
+            ['http://www.cfia.org.cn/gjxm/ShowClass.asp?ClassID=63','0360201'],#国家发改委项目
+            ['http://www.cfia.org.cn/gjxm/ShowClass.asp?ClassID=64','0360202'],#国家科技部项目
+            ['http://www.cfia.org.cn/gjxm/ShowClass.asp?ClassID=65','0360203'],#国家环保部项目
+            ['http://www.cfia.org.cn/gjxm/ShowClass.asp?ClassID=69','0360204'],#国家工信部项目
+            ['http://www.cfia.org.cn/design/ShowClass.asp?ClassID=12','0360301'],#循环经济
+            ['http://www.cfia.org.cn/design/ShowClass.asp?ClassID=13','0360302'],#规范生产
+            ['http://www.cfia.org.cn/design/ShowClass.asp?ClassID=20','0360303'],#淀粉糖20强企业
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])               
+
+            self.crawl('http://www.cfia.org.cn/Article/ShowClass.asp?ClassID=1', callback=self.index_page, save='0360101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.list_news_tit > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save )
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h1').text()
+        content = response.doc('.textbox').html()
+        url = response.url
+        site = 'http://www.cfia.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.from_info').text()
+        print(date_string)
+        print(date_string[date_string.find('更新时间')+5:date_string.rfind('字体')-2])
+        date = time.strptime(date_string[date_string.find('更新时间')+5:date_string.rfind('字体')-2],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
