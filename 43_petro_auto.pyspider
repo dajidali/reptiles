@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-10 10:34:12
+# Project: 43_petro_auto
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):              
+        urls=[
+            ['http://www.cnpci.org.cn/html/dtxw/xhdt/','0430101'],#协会动态
+            ['http://www.cnpci.org.cn/html/dtxw/hyxw/','0430102'],#行业新闻
+            ['http://www.cnpci.org.cn/html/keji/dongtai/','0430201'],#科学技术奖动态
+            ['http://www.cnpci.org.cn/html/career/dynamic/','0430301'],#考核鉴定动态
+            ['http://www.cnpci.org.cn/html/kjjd/kjjddt/','0430401'],#成果鉴定动态
+            ['http://www.cnpci.org.cn/html/dianqi/jianjie/dqfhdt/','0430501']#电气分会动态
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.cnpci.org.cn/html/dtxw/xhdt/', callback=self.index_page, save='0430101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.son-right2 li').items():
+            date_string=each.find('span').text()
+            date = time.strptime(date_string[1:11],'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)    
+            title = each.find('a').text()
+            url = each.find('a').attr.href
+            new_save = (response.save,date,title)
+            self.crawl(url, callback=self.jump_page, save = new_save)
+            
+    @config(priority=2)
+    def jump_page(self, response):
+        content_string = response.doc('.art-content').text()
+        print(content_string)
+        if(content_string.find("location.href")>=0):
+            url = 'http://www.cnpci.org.cn' + content_string[15:len(content_string)-2]
+        else:
+            url = response.url
+        print(url)
+        self.crawl(url, callback=self.detail_page, save = response.save)
+
+    
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.save[2]
+        content = response.doc('.art-content').html()
+        url = response.url
+        site = 'http://www.cnpci.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url) 
+        kind = response.save[0]
+        date = response.save[1]
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
