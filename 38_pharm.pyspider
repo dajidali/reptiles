@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-09 18:06:42
+# Project: 38_pharm
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('http://www.cpia.org.cn/news/association.html' , callback=self.index_page, save='0380101')
+        self.crawl('http://www.cpia.org.cn/news/workdynamic.html' , callback=self.index_page, save='0380102')
+        self.crawl('http://www.cpia.org.cn/news/Industry-info.html' , callback=self.index_page, save='0380103')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.fenye li').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save )
+        for each in response.doc('.msg11111 > div > ul a').items():
+            click = each.attr.onclick
+            new_url = "http://www.cpia.org.cn" + click[12:len(click)-3]
+            self.crawl(new_url, callback=self.detail_page, save = response.save ) 
+            
+    @config(priority=2)
+    def detail_page(self, response):
+        title_str = response.doc('#contentPage > div').text()
+        title = title_str[:title_str.find('发布时间')-1]
+        content = response.doc('.detailedCon').html()
+        url = response.url
+        site = 'http://www.cpia.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.haoduo > p').text()
+        date = time.strptime(date_string[5:15],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
