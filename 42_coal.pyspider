@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-10 10:06:33
+# Project: 42_coal
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):              
+        urls=[
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=265','0420101'],#协会动态
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=650','0420102'],#领导活动
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=266','0420201'],#行业动态
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=337','0420301'],#经济运行
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=569','0420401'],#国际动态
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=574','0420402'],#国际市场
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=571','0420403'],#外事活动
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=572','0420404'],#会议展览
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=453','0420501'],#安全动态
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=456','0420502'],#安全事故
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=4300','0420503'],#安全规程
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=454','0420504'],#安全分析
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=15','0420505'],#安全统计
+            ['http://www.coalchina.org.cn/page/newsmore.jsp?typeid=669','0420506'],#政策法规
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.coalchina.org.cn/page/newsmore.jsp?typeid=265', callback=self.index_page, save='0420101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('td .fB > span > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.xuxian-b > #_ctl0_').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.news_title').text()
+        content = response.doc('.content').html()
+        url = response.url
+        site = 'http://www.coalchina.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.pt-10 td').text()
+
+        date = time.strptime(date_string[18:28],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+   
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
