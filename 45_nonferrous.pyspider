@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-11 08:44:35
+# Project: 45_nonferrous
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinania.org.cn/html/yaowendongtai/guoneixinwen/','0450101'],#国内新闻
+            ['http://www.chinania.org.cn/html/guojihezuo/guojixinwen/','0450102'],#国际新闻
+            ['http://www.chinania.org.cn/html/zhengcefagui/falvfagui/','0450201'],#法律法规
+            ['http://www.chinania.org.cn/html/zhengcefagui/zhengcejiedu/','0450202'],#政策解读
+            ['http://www.chinania.org.cn/html/kuangchanziyuan/','0450301'],#矿产资源
+            ['http://www.chinania.org.cn/html/shichanghangqing/','0450401'],#市场行情
+            ['http://www.chinania.org.cn/html/hangyetongji/tongji/','0450501'],#行业统计
+            ['http://www.chinania.org.cn/html/hangyetongji/chanyeshuju/','0450502'],#产业数据
+            ['http://www.chinania.org.cn/html/hangyeyanjiu/','0450601'],#行业研究
+            ['http://www.chinania.org.cn/html/kejifazhan/kejizixun/','0450701'],#科技资讯
+            ['http://www.chinania.org.cn/html/kejifazhan/kejichuangxin/','0450702'],#科技创新
+            ['http://www.chinania.org.cn/html/xinxihua/','0450801'],#信息化
+            ['http://www.chinania.org.cn/html/guojihezuo/guojijiaoliu/','0450901'],#国际交流
+            ['http://www.chinania.org.cn/html/guojihezuo/guojixinwen/','0450902'],#国际新闻
+            ['http://www.chinania.org.cn/html/huiyizhanlan/','0451001'],#会议展览
+            ['http://www.chinania.org.cn/html/xiehuidongtai/xiehuitongzhi/','0451101'],#协会通知
+            ['http://www.chinania.org.cn/html/xiehuidongtai/xiehuidongtai/','0451102'],#协会动态
+            ['http://www.chinania.org.cn/html/xiehuidongtai/huiyuandongtai/','0451103'],#会员动态
+            ['http://www.chinania.org.cn/html/jienengxunhuan/anquanhuanbao/','0451201'],#安全环保
+            ['http://www.chinania.org.cn/html/jienengxunhuan/jienengjianpai/','0451202'],#节能减排
+            ['http://www.chinania.org.cn/html/jienengxunhuan/xunhuanjingji/','0451203'],#循环经济
+            ['http://www.chinania.org.cn/html/qiyewenhua/qiyewenhuaxinwen/','0451301'],#企业文化新闻
+            ['http://www.chinania.org.cn/html/qiyewenhua/qiyezhuanti/','0451302'],#企业专题
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        #self.crawl('http://www.chinania.org.cn/html/yaowendongtai/guoneixinwen/', callback=self.index_page, save='0450101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.text-c > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.col-auto li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title_string = response.doc('h1').html()
+        title = title_string[:title_string.find('<')]
+        content = response.doc('#Article').html()
+        url = response.url
+        site = 'http://www.chinania.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('h1 > span').text()
+
+        date = time.strptime(date_string[:10],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)              
