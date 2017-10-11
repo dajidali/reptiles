@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-10 14:14:09
+# Project: 44_textile_io
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):   
+        urls=[
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1z5201z8395zO3w8w1v2v1v4u9z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v6v1v3v0u9vV5u8v2v0v3u8v3vV1v1vS8v6u8v2v1v3v0vS9vV5v1u8v2v0vV3u8v3u9u9v5v4u8v3u8u9u9v0v3v6v2vV2vVV6u9vV5v3u9vV6v6v1v3v0u8v7u9v6v5v0u9u8u8v0v0vS9u8v6v3v5v4u9u9vV7v0v6u9v0v3v0v6u8u9v1v1vV1v0u9vS9v7v6vS9v3u8z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v2v1v4u9&lsttable_CurrentPageIndex=0','0440101'],#商会要闻
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1z6890z0693y0844y1578zO3w8w1v1v3v6u9z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v1v3vV5u8v5u9v1vS8u9u8v5u8u9u8u9v2v0u8v2v3vV5v1u8v5u9v3v1vS8v6u9u8v5v3v6u8u9v5v6v1v3u8v0u9vS8v0u8v0v2v7vV7u8v0v6v3v1v4u8v1v0u9u8v1u8v1v3vV5u8u8v1v7v0v1v5u8v2v0v6u8vS8v2vV1v5u9u8v2v7v7v1v6u8v3v1v3u8v3u8v3v5u8v5v0z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v1v3v6u9&lsttable_CurrentPageIndex=0','0440102'],#通知公告
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1y1830y0250y1160y4577zO3w8w1v1v3v6vZ8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v1v3vV5u8v5u9v1vS8u9u8v5u8u9u8u9v2v0u8v2v3vV5v1u8v5u9v3v1vS8v6u9u8v5v3v6u8u9v5v6v1v3u8v0u9vS8v0u8v0v2v7vV7u8v0v6v3v1v4u8v1v0u9u8v1u8v1v3vV5u8u8v1v7v0v1v5u8v2v0v6u8vS8v2vV1v5u9u8v2v7v7v1v6u8v3v1v3u8v3u8v3v5u8v5v0z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v1v3v6v3&lsttable_CurrentPageIndex=0','0440103'],#商会动态
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1z615Y6131y0449y4687zO3w8w1v2v5v1v1z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1u9v1v3u8u8v0v5u8u8u8vS8v3u8u8v3vS8v2v1v3u8v1u8v0v5v3u8u8u8vVS8v3v7vV5v3u8u8v6u9u8u8u8v7v2v3u8u8u9u8v6u8u8u8u9v0u9v3u8u8u9v1v3u8u8u8u9v2v6v3u8u8u9vV0u8u8u8u9v5v3v3u8u8u9v6v7u8u8u8v0u8v0v3u8u8v0u9v4u8u8u8v0v0v7v3u8u8z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v2v5v1v1&lsttable_CurrentPageIndex=0','0440201'],#贸易信息
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1y2269y2806zO3w8w1u9v3u8vZ8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v1u8v6v5u8v4u9v5vS8v7v0v4u9u8u9v0v1v2v6u8u9v3u8vS8v6v5u9u8v4u9v3v5vS8u8v7v0vV3u8u9v3v2v1v3u8u9v6v3v0v0u8v0u9v4u8v7u8v0v2vV7v4u8v0v5v5v6v1u8v1u8v6v5u8u8v1v1v7v3v5u8v1v5u8v2vS8vS8u9v1u9u8v2v1v0u9v6u8v2vV1u8v3u8v2v7z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1u9v3u8v3&lsttable_CurrentPageIndex=0','0440202'],#国外
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1y2269y0869zO3w8w1v1v3v3v5z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v2vS9u8v6v6v0u8u9v1v0v1u8u9v5vVS8v0v0u8v3u8v0v4u8v2vS9u8v1v6v6v0v3u8u9v1v3v0v1u8v5u8v3u8v0vV2v4u8v1u8v6v5u8v1v3v0v6u8v1v7vV7u8v2vS9u8u8v2v6v3u9u8v3v0v7v0u8v3v5v1v1u8v4u9v5vS8vV4u9v3u8v5u8v3v4u8v5v2v7v5u8v5v7v1v6z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v1v3v3v5&lsttable_CurrentPageIndex=0','0440203'],#国内
+            ['http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1z4892x9994z5770y236ZO3w8w1v1v3v5v1z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1vS9v0v3u8v6v0v3u8u8u9u8vS9v0v3v1u8v6v0v3v3u8u8v5u9v0v1v1u8u8v0u8vV0v3u8v0v2v5v3u8u8v0v6v6v5v3u8v1v1u8u8u8u8v1v5u9v0v3u8vS9v0v3u8u8v2v3v1v5v3u8v2v7v3u8u8u8v3v1vV0v3u8v3v5v5v3u8u8v4u9v6v5v3u8vV4u8u8u8u8v5u8u9v0v3u8v5z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v1v3v5v1&lsttable_CurrentPageIndex=0','0440204'],#行业论坛
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])               
+        #self.crawl('http://www.ccct.org.cn/ICClist.aspx?queryStr=x08x12o8q7x09x01w1z5201z8395zO3w8w1v2v1v4u9z8p2x01q9p4x2X12x01w1u9z8w7x08q7x15x15p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w7x08q7x15x15p4q7q8x08x01o8q7x09x01w1w7o7p3q5o6q7x10o7x17z8p5x10x05x13x17x01o3w8w1v6v1v3v0u9vV5u8v2v0v3u8v3vV1v1vS8v6u8v2v1v3v0vS9vV5v1u8v2v0vV3u8v3u9u9v5v4u8v3u8u9u9v0v3v6v2vV2vVV6u9vV5v3u9vV6v6v1v3v0u8v7u9v6v5v0u9u8u8v0v0vS9u8v6v3v5v4u9u9vV7v0v6u9v0v3v0v6u8u9v1v1vV1v0u9vS9v7v6vS9v3u8z8w8q7x16q7p3x0X14x18x0X14o3w8w1p3p9p3p3x0X14x18x0X14z8w8q7x16q7p4q7q8x08x01o8q7x09x01w1w7o7p3q5p7x0X10w8q7x10x0Z8w7x08q7x15x15o3w8w1v2v1v4u9&lsttable_CurrentPageIndex=0', callback=self.index_page, save='0440101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('span > a').items():
+            script=each.attr.onclick
+            number = script[9:len(script)-13]
+            old_url = response.url
+            new_url = old_url[:old_url.rfind('=')+1] + number
+            print(new_url)
+            self.crawl(new_url, callback=self.index_page, save = response.save)
+        for each in response.doc('.DocTitle > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.news').find('p').html()
+        content = response.doc('.doccentent').html()
+        url = response.url
+        site = 'http://www.ccct.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.top').text()
+
+        date = time.strptime(date_string[5:16],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)        
