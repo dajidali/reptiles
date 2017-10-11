@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-11 09:52:55
+# Project: 47_decoration
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cadbm.com.cn/a/news/xhdt/','0470101'],#协会动态
+            ['http://www.cadbm.com.cn/a/news/hyxw/','0470201'],#行业新闻
+            ['http://www.cadbm.com.cn/a/news/xhxw/','0470301'],#技术交流
+            ['http://www.cadbm.com.cn/a/news/xhgg/','0470401'],#协会公告
+            ['http://www.cadbm.com.cn/a/news/fhhd/','0470501'],#分会活动
+            ['http://www.cadbm.com.cn/a/news/hybz/','0470601'],#行业标准化
+            ['http://www.cadbm.com.cn/a/news/zcfg/','0470701'],#政策法规
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        #self.crawl('http://www.cadbm.com.cn/a/news/xhdt/', callback=self.index_page, save='0470101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('div > li > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.xiehui-gonggao a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.p1').text()
+        content = response.doc('.xiehui-gonggao-details').html()
+        url = response.url
+        site = 'http://www.cadbm.com.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.p2').text()
+
+        date = time.strptime(date_string[6:16],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
