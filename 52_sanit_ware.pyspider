@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-13 15:59:05
+# Project: 52_sanit_ware
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=13', callback=self.index_page, save='0520101') #信息快报
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=14', callback=self.index_page, save='0520102') #协会活动
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=15', callback=self.index_page, save='0520103') #知识导航
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=11&SclassID=30', callback=self.index_page, save='0520201') #行业排行榜
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=36', callback=self.index_page, save='0520301') #国际展览
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=16', callback=self.index_page, save='0520302') #国内展览
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.newBlack > font').items():
+            self.crawl(each.parent().attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.newBlack > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('tr > .title').text()
+        content_string = response.doc('.PX12').parent().parent().parent().html()
+        content = content_string[:content_string.find('关闭窗口')+41]
+        url = response.url
+        site = 'http://www.ec.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.PX12 > font').text()
+        print(date_string)
+        date = time.strptime(date_string[:date_string.find(' ')],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)     
