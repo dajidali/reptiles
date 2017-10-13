@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-13 14:41:12
+# Project: 51_e_commeric
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.ec.org.cn/?channel-66.html','0510101'],#教育培训
+            ['http://www.ec.org.cn/?channel-67.html','0510102'],#法规标准
+            ['http://www.ec.org.cn/?channel-68.html','0510103'],#其它
+            ['http://www.ec.org.cn/?channel-75.html','0510104'],#行业信用
+            ['http://www.ec.org.cn/?channel-53.html','0510105'],#国际交流
+            ['http://www.ec.org.cn/?channel-29.html','0510106'],#行业大会
+            ['http://www.ec.org.cn/?channel-70.html','0510201'],#政府信息
+            ['http://www.ec.org.cn/?channel-71.html','0510202'],#网站公告
+            ['http://www.ec.org.cn/?channel-72.html','0510203'],#协会动态
+            ['http://www.ec.org.cn/?channel-73.html','0510204']#要闻通告
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        #self.crawl('http://www.ec.org.cn/?channel-69.html', callback=self.index_page, save='0510101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page_turner > a').items():
+            if(each.attr.href is not None and each.attr.href.find('http')>=0):
+                 self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('p > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('#info_name').text()
+        content = response.doc('.right_body').html()
+        url = response.url
+        site = 'http://www.ec.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date = time.strftime('00000000')        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)                 
+ 
