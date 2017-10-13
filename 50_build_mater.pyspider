@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-13 13:49:02
+# Project: 50_build_mater
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cbmma.org.cn/news.aspx?class=115&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500101'],#协会公告
+            ['http://www.cbmma.org.cn/news.aspx?class=116&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500102'],#协会动态
+            ['http://www.cbmma.org.cn/news.aspx?class=138&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500201'],#通知公告
+            ['http://www.cbmma.org.cn/news.aspx?class=139&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500202'],#信誉动态
+            ['http://www.cbmma.org.cn/news.aspx?class=140&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=2','0500203'],#政策法规
+            ['http://www.cbmma.org.cn/news.aspx?class=141&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=2','0500204'],#信用知识
+            ['http://www.cbmma.org.cn/news.aspx?class=142&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500301'],#国内展览
+            ['http://www.cbmma.org.cn/news.aspx?class=143&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500302'],#国际展览
+            ['http://www.cbmma.org.cn/news.aspx?class=144&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500303'],#国际交流
+            ['http://www.cbmma.org.cn/news.aspx?class=145&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500304'],#讨论研讨会
+            ['http://www.cbmma.org.cn/news.aspx?class=146&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1','0500305']#专业培训
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.cbmma.org.cn/news.aspx?class=115&__EVENTTARGET=ctl00$ContentPlaceHolder1$AspNetPager1&__EVENTARGUMENT=1', callback=self.index_page, save='0500101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('#ctl00_ContentPlaceHolder1_AspNetPager1 > a').items():
+            if not each.attr.href is None:
+                script = each.attr.href
+                pageNumber = script[script.rfind(",")+2:len(script)-2]
+                old_url = response.url
+                new_url = old_url[:old_url.rfind("=")+1] + pageNumber
+                self.crawl(new_url, callback=self.index_page, save = response.save)
+        for each in response.doc('li').items():
+            date_string=each.find('span').text()
+            date = time.strptime(date_string[:10],'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)    
+            title = each.find('a').text()
+            url = each.find('a').attr.href
+            new_save = (response.save,date,title)
+            self.crawl(url, callback=self.detail_page, save = new_save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h1').text()
+        content = response.doc('#right_text').html()
+        url = response.url
+        site = 'http://www.cbmma.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        kind = response.save[0]
+        date = response.save[1]
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+            
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
