@@ -17,9 +17,8 @@ class Handler(BaseHandler):
         self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=13', callback=self.index_page, save='0520101') #信息快报
         self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=14', callback=self.index_page, save='0520102') #协会活动
         self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=8&SclassID=15', callback=self.index_page, save='0520103') #知识导航
-        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=11&SclassID=30', callback=self.index_page, save='0520201') #行业排行榜
-        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=36', callback=self.index_page, save='0520301') #国际展览
-        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=16', callback=self.index_page, save='0520302') #国内展览
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=36', callback=self.index_page, save='0520201') #国际展览
+        self.crawl('http://www.china-china.cn/news/News_List.asp?BClassID=34&SclassID=16', callback=self.index_page, save='0520202') #国内展览
 
     @config(age=10 * 24 * 60 * 60)
     def index_page(self, response):
