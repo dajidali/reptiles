@@ -44,7 +44,7 @@ class Handler(BaseHandler):
         title = response.doc('.article_newslist_nav > p').text()
         content = response.doc('.article_news_main').html()
         url = response.url
-        site = 'http://www.cgcc.org.cn/'
+        site = 'http://www.zxsx.org/'
         content_dom = tools.ext_cont(url, content)
         pagekey = tools.get_md5(title+url)
         date_string = response.doc('.article_news_int > p').text()
