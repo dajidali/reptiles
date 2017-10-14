@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-14 10:25:52
+# Project: 57_enterprise
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=4','0570101'],#企业要讯
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=2','0570201'],#企联活动预告
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=1','0570301'],#企联动态
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=5','0570401'],#企联视点
+            ['http://www.cec-ceda.org.cn/more_syzb.php','0570501'],#在线直播
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=24','0570601'],#企业家动态
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=23','0570701'],#产业动态
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=29','0570801'],#国际财经
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=30','0570901'],#部委信息
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=32','0571001'],#行业协会动态
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=31','0571101'],#会展专讯
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=3','0571201'],#地方企联动态
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=27','0571301'],#会员供求信息
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=25','0571401'],#企管新书目
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=21','0571501'],#管理创新成果
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=34','0571601'],#两化融合
+            ['http://www.cec-ceda.org.cn/more_sy.php?sid=9','0571701'],#企业技术创新
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        
+        #self.crawl('http://www.cec-ceda.org.cn/more_sy.php?sid=4', callback=self.index_page, save='0490101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('font > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('td > .STYLE25').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.zhuti').text()
+        content = response.doc('.STYLE16').html()
+        url = response.url
+        site = 'http://www.cec-ceda.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('tr > .STYLE19').text()
+
+        date = time.strptime('20'+date_string[date_string.find('发布时间:')+11:date_string.find('发布时间:')+19],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)        
