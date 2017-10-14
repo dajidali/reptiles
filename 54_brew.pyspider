@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-14 09:13:59
+# Project: 54_brew
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cada.cc/Category_24/Index.aspx','0540101'],#通知公告
+            ['http://www.cada.cc/Category_25/Index.aspx','0540102'],#协会新闻
+            ['http://www.cada.cc/Category_26/Index.aspx','0540103'],#国内新闻
+            ['http://www.cada.cc/Category_27/Index.aspx','0540104'],#国际新闻
+            ['http://www.cada.cc/Category_28/Index.aspx','0540201'],#科技奖
+            ['http://www.cada.cc/Category_29/Index.aspx','0540202'],#仪狄奖
+            ['http://www.cada.cc/Category_30/Index.aspx','0540203'],#社会责任奖
+            ['http://www.cada.cc/Category_31/Index.aspx','0540301'],#教育培训
+            ['http://www.cada.cc/Category_32/Index.aspx','0540302'],#行业分析
+            ['http://www.cada.cc/Category_33/Index.aspx','0540303'],#体系认证
+            ['http://www.cada.cc/Category_34/Index.aspx','0540304'],#政府采购
+            ['http://www.cada.cc/Category_35/Index.aspx','0540305'],#行业标准
+            ['http://www.cada.cc/Category_36/Index.aspx','0540306'],#酒庄建设
+            ['http://www.cada.cc/Category_37/Index.aspx','0540307'],#乐啤联盟
+            ['http://www.cada.cc/Category_38/Index.aspx','0540308'],#老酒鉴定
+            ['http://www.cada.cc/Category_39/Index.aspx','0540309'],#酒精信息
+            ['http://www.cada.cc/Category_43/Index.aspx','0540401'],#会员动态
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.cada.cc/Category_24/Index.aspx', callback=self.index_page, save='0490101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.pagecss > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.listBox li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('font').text()
+        content = response.doc('.conBox').html()
+        url = response.url
+        site = 'http://www.cada.cc/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.con_tit > span').text()
+
+        date = time.strptime(date_string[date_string.find('时间:')+10:date_string.find('时间:')+21],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
