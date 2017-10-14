@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-14 15:01:03
+# Project: 59_medicine
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.capc.org.cn/index.html/list-0f07100bd1c94a6e86b066e4a3d577ff.html?pageNo=1&pageSize=10000','0590101'],#法规标准
+            ['http://www.capc.org.cn/index.html/list-973584c8ac764238a5af133c5561f351.html?pageNo=1&pageSize=10000','0590201'],#行业动态
+            ['http://www.capc.org.cn/index.html/list-bc202d910c064b498f23a7346210a1e4.html?pageNo=1&pageSize=10000','0590301'],#会议会展
+            ['http://www.capc.org.cn/index.html/list-dbf20bf06fa748b290bfa7972af7a4b7.html?pageNo=1&pageSize=10000','0590401'],#信息平台
+            ['http://www.capc.org.cn/index.html/list-ff0c69613f1045f395b2557305cf670f.html?pageNo=1&pageSize=10000','0590501'],#培训工作
+            ['http://www.capc.org.cn/index.html/list-5442a4640614463db9059e06976140c1.html?pageNo=1&pageSize=10000','0590601'],#贯标评级
+            ['http://www.capc.org.cn/index.html/list-38b611771ff44fca9ad1667d63a98afe.html?pageNo=1&pageSize=10000','0590701'],#国际交流
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.capc.org.cn/index.html/list-0f07100bd1c94a6e86b066e4a3d577ff.html?pageNo=1&pageSize=10000', callback=self.index_page, save='0590101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.fr > h2').items():
+            print(each.parent())
+            self.crawl(each.parent().parent().attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.list_a > h2').text()
+        content = response.doc('.list_a').html()
+        url = response.url
+        site = 'http://www.capc.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.time').text()
+
+        date = time.strptime(date_string[:10],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)          
