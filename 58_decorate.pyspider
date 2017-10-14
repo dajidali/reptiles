@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-14 14:17:32
+# Project: 58_decorate
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cbda.cn/html/news/yw/','0580101'],#要闻
+            ['http://www.cbda.cn/html/news/hyfx/','0580102'],#行业分析
+            ['http://www.cbda.cn/html/news/syxx/hz/','0580103'],#展会活动
+            ['http://www.cbda.cn/html/news/syxx/fg/','0580104'],#行业法规
+            ['http://www.cbda.cn/html/news/yw/kx/','0580105'],#快讯
+            ['http://www.cbda.cn/html/xiehui/dtxx/xhdongtai/','0580201'],#协会动态
+            ['http://www.cbda.cn/html/xiehui/difangxiehui/difangxiehuidongtai/','0580202'],#地方协会动态
+            ['http://www.cbda.cn/html/xiehui/difangxiehui/difangtztg/','0580203'],#地方通知通告
+            ['http://www.cbda.cn/html/baiqiang/topnews/','0580301'],#百强动态
+            ['http://www.cbda.cn/html/baiqiang/tophistory/','0580302'],#历届百强
+            ['http://www.cbda.cn/html/baiqiang/bqzhuanti/','0580303'],#百强专题
+            ['http://www.cbda.cn/html/baiqiang/topproject/','0580304'],#优秀项目
+            ['http://www.cbda.cn/html/baiqiang/sdbd/','0580305'],#深度报道
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        
+        #self.crawl('http://www.cbda.cn/html/xiehui/dtxx/tzgg/', callback=self.index_page, save='0580201')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        if(response.save.find('05801')>=0):
+            for each in response.doc('#pages > a').items():
+                self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+            for each in response.doc('li > div > a').items():
+                self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        else:
+            for each in response.doc('.pages > a').items():
+                self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+            for each in response.doc('li > span > a').items():
+                self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+    @config(priority=2)
+    def detail_page(self, response):
+        if(response.save.find('05801')>=0 or response.save.find('05803')>=0):
+            title = response.doc('#content > strong').text()
+            content = response.doc('#content').html()
+            url = response.url
+            site = 'http://www.cbda.cn/'
+            content_dom = tools.ext_cont(url, content)
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('#con_info > span').text()
+
+            date = time.strptime(date_string[date_string.find('时间:')+3:date_string.find('时间:')+13],'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date) 
+        else:
+            title = response.doc('.nr_biaoti').text()
+            content = response.doc('.con_left > .wryh').html()
+            url = response.url
+            site = 'http://www.cbda.cn/'
+            content_dom = tools.ext_cont(url, content)
+            pagekey = tools.get_md5(title+url)
+            date_string = response.doc('#con_info > span').text()
+
+            date = time.strptime(date_string[date_string.find('时间：')+3:date_string.find('时间：')+13],'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date) 
+           
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
+    
