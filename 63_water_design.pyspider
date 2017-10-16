@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-16 15:09:09
+# Project: 63_water_design
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=131','0630101'],#行业新闻
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=132','0630102'],#勘察设计单位改革
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=133','0630103'],#地方勘测设计协会
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=134','0630104'],#重大工程进展
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=28','0630201'],#全国规划
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=29','0630202'],#流域规划
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=30','0630203'],#区域规划
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=31','0630204'],#战略研究
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=41','0630301'],#法律
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=424','0630302'],#法规
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=42','0630303'],#规范文件
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=46','0630401'],#政工动态
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=44','0630402'],#精神文明
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=218','0630403'],#水院人物
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=219','0630404'],#论文精粹
+            ['http://www.giwp.org.cn/index.do?act=lmod&modu=297','0630405'],#经验交流
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.giwp.org.cn/index.do?act=lmod&modu=205', callback=self.index_page, save='0490101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.next > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.listpanel a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h1').text()
+        content = response.doc('.article').html()
+        url = response.url
+        site = 'http://www.giwp.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('small > span').text()
+
+        date = time.strptime(date_string[len(date_string)-10:],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
