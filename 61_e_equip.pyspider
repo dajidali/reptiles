@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-16 09:50:21
+# Project: 61_e_equip
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.ceeia.com/News_List.aspx?ClassId=1','0610101'],#协会动态
+            ['http://www.ceeia.com/News_List.aspx?ClassId=32','0610201'],#综合新闻
+            ['http://www.ceeia.com/News_List.aspx?ClassId=34','0610301'],#行业纵览
+            ['http://www.ceeia.com/News_List.aspx?ClassId=3','0610401'],#技术前沿
+            ['http://www.ceeia.com/News_List.aspx?ClassId=49','0610501'],#会展动态
+            ['http://www.ceeia.com/News_List.aspx?ClassId=283','0610502'],#展会信息
+            ['http://www.ceeia.com/News_List.aspx?ClassId=290','0610503'],#电器会议
+            ['http://www.ceeia.com/News_List.aspx?ClassId=286','0610504'],#近期展会
+            ['http://www.ceeia.com/News_List.aspx?ClassId=287','0610505'],#展会回顾
+            ['http://www.ceeia.com/News_List.aspx?ClassId=288','0610506'],#展会合作
+            ['http://www.ceeia.com/News_List.aspx?ClassId=115','0610601'],#工作动态
+            ['http://www.ceeia.com/News_List.aspx?ClassId=118','0610602'],#团体标准化
+            ['http://www.ceeia.com/News_List.aspx?ClassId=30','0610701'],#信用体系
+            ['http://www.ceeia.com/News_List.aspx?ClassId=21','0610801'],#国际交流
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])
+        #self.crawl('http://www.ceeia.com/News_List.aspx?ClassId=32', callback=self.get_index_page, save='0610101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def get_index_page(self, response):
+        get_page_string = response.doc('script').eq(7).html()
+        items_count = get_page_string[get_page_string.find('pagination')+11:get_page_string.find(',')]
+        items_per_page = 22
+        max_page = int(items_count)//items_per_page
+        print(int(items_count)//items_per_page)
+        for each in range(0,max_page):
+            self.crawl(response.url + '&page=' + str(each), callback=self.index_page, save = response.save)
+            
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.news_ri_list a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.de_con_title > label').text()
+        content = response.doc('.xh_de_content').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#ctl00_MainContent_LastTime').text()
+
+        date = time.strptime(date_string,'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)             
