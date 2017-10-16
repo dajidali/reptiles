@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-16 15:27:20
+# Project: 64_water_proj
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('http://www.cweun.org/list.php?id=11', callback=self.index_page, save='0640101') #通知公告
+        self.crawl('http://www.cweun.org/list.php?id=14', callback=self.index_page, save='0640201') #协会动态
+        self.crawl('http://www.cweun.org/list.php?id=12', callback=self.index_page, save='0640301') #文件标准
+        self.crawl('http://www.cweun.org/list.php?id=13', callback=self.index_page, save='0640401') #法律法规
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('#table15 a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        for each in response.doc('#table10 td > a').items():
+            if(len(each.attr.href)!=24):
+                self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+
+    @config(priority=1)
+    def detail_page(self, response):
+        title = response.doc('span > b').text()
+        content = response.doc('#table11').html()
+        url = response.url
+        site = 'http://www.cweun.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#table11 p').eq(1).text()
+
+        date = time.strptime(date_string,'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)       
