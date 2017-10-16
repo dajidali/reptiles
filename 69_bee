@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-16 18:37:19
+# Project: 69_bee
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=4&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690101')#新闻中心
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=5&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690102')#协会动态
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=6&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690103')#会员信息
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=7&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690104')#地方动态
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=8&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690105')#国际峰情
+        self.crawl('http://www.china-bee.com/news_list/newsCategoryId=9&FrontNews_list01-1494313369051_pageNo=1&FrontNews_list01-1494313369051_pageSize=10000.html', callback=self.index_page, save='0690106')#通知公告
+        
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.number > a').items():
+            self.crawl(each.attr.onclick, callback=self.index_page, save = response.save)
+        for each in response.doc('.FrontNews_list01-d1_c1_01 > .newslist-01 a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h2').text()
+        content = response.doc('.FrontNews_detail01-d1_c1 > div').html()
+        url = response.url
+        site = 'http://www.china-bee.com/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.date').text()
+
+        date = time.strptime(date_string[date_string.find('日期:')+5:len(date_string)],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
