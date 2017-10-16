@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-16 16:49:18
+# Project: 66_perfume
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        self.crawl('http://www.caffci.org/xh_list.php?code=11&lan=2', callback=self.index_page, save='0660101')
+        self.crawl('http://www.caffci.org/xh_list.php?code=5&lan=4', callback=self.index_page, save='0660201')
+        self.crawl('http://www.caffci.org/xh_list.php?code=21&lan=5', callback=self.index_page, save='0660301')
+        self.crawl('http://www.caffci.org/xh_list.php?code=31&lan=6', callback=self.index_page, save='0660401')
+        self.crawl('http://www.caffci.org/xh_common.php?code=75&lan=10', callback=self.index_page, save='0660501')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('ul > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.list1 > p').items():
+            self.crawl(each.parent().attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title_string = response.doc('#title').text()
+        title = title_string[0:len(title_string)-11]
+        content = response.doc('#text0').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#title > font').text()
+
+        date = time.strptime(date_string,'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
