@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 15:36:54
+# Project: 77_jewelry
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=87&CID=4&Maticsoft=340&Ms=87','0770101'],#通知公告
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=92&CID=4&Maticsoft=306&Ms=92','0770102'],#行业资讯
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=89&CID=4&Maticsoft=304&Ms=89','0770103'],#协会动态
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=91&CID=4&Maticsoft=305&Ms=91','0770104'],#会员动态
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=96&CID=4&Maticsoft=308&Ms=96','0770105'],#收藏鉴赏
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=94&CID=4&Maticsoft=307&Ms=94','0770106'],#政策园地
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=121&CID=10&Maticsoft=333&Ms=121','0770201'],#来访会谈
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=123&CID=10&Maticsoft=334&Ms=123','0770202'],#展会交流
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=125&CID=10&Maticsoft=335&Ms=125','0770203'],#项目合作
+            ['http://www.jewellery.org.cn/news_lb.aspx?ClassID=126&CID=10&Maticsoft=336&Ms=126','0770204'],#国际资讯
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.jewellery.org.cn/news_lb.aspx?ClassID=87&CID=4&Maticsoft=340&Ms=87', callback=self.index_page, save='0770101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.fy a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.wjxz > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('#ctl00_ContentPlaceHolder1_lbTitle').text()
+        content = response.doc('.new_text3').html()
+        url = response.url
+        site = 'http://www.jewellery.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.ch06 > span').text()
+
+        date = time.strptime(date_string,'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
