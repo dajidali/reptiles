@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 14:41:57
+# Project: 74_cereal
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinagrains.org.cn/info/1904/type_4881.html','0750101'],#行业要闻
+            ['http://www.chinagrains.org.cn/info/1904/type_4883.html','0750102'],#通知公告
+            ['http://www.chinagrains.org.cn/info/1904/type_4884.html','0750103'],#对外交流
+            ['http://www.chinagrains.org.cn/info/1904/type_5111.html','0750104'],#供给侧改革
+            ['http://www.chinagrains.org.cn/info/1907/type_4888.html','0750201'],#放心粮油示范企业
+            ['http://www.chinagrains.org.cn/info/1907/type_4891.html','0750202'],#放心粮油宣传日
+            ['http://www.chinagrains.org.cn/info/1908/type_5073.html','0750301'],#行规行约
+            ['http://www.chinagrains.org.cn/info/1908/type_5075.html','0750302'],#诚信建设
+            ['http://www.chinagrains.org.cn/info/1909/type_5042.html','0750401'],#通知公告
+            ['http://www.chinagrains.org.cn/info/1909/type_4909.html','0750402'],#中国粮食论坛
+            ['http://www.chinagrains.org.cn/info/1910/list.html','0750501'],#会员之家
+            ['http://www.chinagrains.org.cn/info/1912/type_5016.html','0750601'],#优势产业命名
+            ['http://www.chinagrains.org.cn/info/1912/type_4927.html','0750602'],#50强企业
+            ['http://www.chinagrains.org.cn/info/1912/type_4926.html','0750603'],#中国驰名商标
+            ['http://www.chinagrains.org.cn/info/1912/type_5070.html','0750604'],#地理标志
+            ['http://www.chinagrains.org.cn/info/1912/type_4925.html','0750605'],#中国名牌
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.chinagrains.org.cn/info/1904/type_4881.html', callback=self.index_page, save='0750101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.li_sali1').items():
+            date_string=each.find('span').text()
+            print(date_string)
+            date = time.strptime(date_string,'%Y-%m-%d')
+            date = time.strftime('%Y%m%d',date)    
+            title = each.find('a').text()
+            url = each.find('a').attr.href
+            print(title)
+            new_save = (response.save,date,title)
+            self.crawl(url, callback=self.detail_page, save = new_save)
+            
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.save[2]
+        content = response.doc('.details').html()
+        url = response.url
+        site = 'http://www.chinagrains.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date = response.save[1]
+        kind = response.save[0]
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)     
