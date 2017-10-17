@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 15:57:22
+# Project: 78_pack
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+                ['http://www.cpta.org.cn/articleListPage.html?id=8&template1=one&prePageSize=13&toPage=1','0780101'],#	联合会新闻
+                ['http://www.cpta.org.cn/articleListPage.html?id=108&template1=one&prePageSize=13&toPage=1','0780102'],#	焦点新闻
+                ['http://www.cpta.org.cn/articleListPage.html?id=9&template1=one&prePageSize=13&toPage=1','0780103'],#	公告通知
+                ['http://www.cpta.org.cn/articleListPage.html?id=33&template1=one&prePageSize=13&toPage=1','0780201'],#	两化融合
+                ['http://www.cpta.org.cn/articleListPage.html?id=74&template1=one&prePageSize=13&toPage=1','0780202'],#	经济运行
+                ['http://www.cpta.org.cn/articleListPage.html?id=30&template1=one&prePageSize=13&toPage=1','0780301'],#	国际包装资讯
+                ['http://www.cpta.org.cn/articleListPage.html?id=29&template1=one&prePageSize=13&toPage=1','0780302'],#	国内包装资讯
+                ['http://www.cpta.org.cn/articleListPage.html?id=32&template1=one&prePageSize=13&toPage=1','0780303'],#	上下游资讯
+                ['http://www.cpta.org.cn/articleListPage.html?id=31&template1=one&prePageSize=13&toPage=1','0780304'],#	会展资讯
+                ['http://www.cpta.org.cn/articleListPage.html?id=96&template1=one&prePageSize=13&toPage=1','0780305'],#	行业分类资讯
+                ['http://www.cpta.org.cn/articleListPage.html?id=7&template1=one&prePageSize=13&toPage=1','0780401'],#	政策法规
+                ['http://www.cpta.org.cn/articleListPage.html?id=55&template1=one&prePageSize=13&toPage=1','0780402'],#	包装标准
+                ['http://www.cpta.org.cn/articleListPage.html?id=56&template1=one&prePageSize=13&toPage=1','0780403'],#	国际组织
+                ['http://www.cpta.org.cn/articleListPage.html?id=57&template1=one&prePageSize=13&toPage=1','0780404'],#	检测机构
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        
+        #self.crawl('http://www.cpta.org.cn/articleListPage.html?id=8&template1=one&prePageSize=13&toPage=1', callback=self.get_index_page, save='0780101')
+
+
+    @config(age=10 * 24 * 60 * 60)
+    def get_index_page(self, response):
+        items_per_page=10
+        max_page = int(response.doc('ul').attr.total)//items_per_page
+        print(max_page)
+        old_url = response.url
+        new_url = old_url[:old_url.rfind('=')+1]
+        print(new_url)
+        for each in range(1,max_page+1):
+            self.crawl(new_url + str(each), callback=self.index_page, save = response.save)
+            
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h3').text()
+        content = response.doc('.cell').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.cellt > span').text()
+
+        date = time.strptime(date_string[:10],'%Y/%m/%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)   
