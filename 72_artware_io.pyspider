@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 10:15:15
+# Project: 72_artware_io
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?m=Associator_NewsList&issuanceToID=2&newsTypeID=0&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720101'],#新闻动态
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?issuanceToID=3&newsTypeID=6&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720102'],#行业热点
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?m=Associator_NewsList&issuanceToID=4&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720104'],#商会工作
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?m=Associator_NewsList&issuanceToID=18&newsTypeID=46&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720106'],#展会资讯
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?issuanceToID=23&newsTypeID=13&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720107'],#企业风采
+                ['http://www.cccla.org.cn/IssuanceMore.aspx?m=Associator_NewsList&newsTypeID=48&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1','0720108'],#热点专题
+        ]
+        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])               
+        
+        #self.crawl('http://www.cccla.org.cn/IssuanceMore.aspx?m=Associator_NewsList&issuanceToID=2&newsTypeID=0&__EVENTTARGET=ctl00$cphContent$FrontPager1$Pager1&__EVENTARGUMENT=1', callback=self.index_page, save='0720101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('#ctl00_cphContent_FrontPager1_Pager1 a').items():
+            if not each.attr.href is None:
+                script = each.attr.href
+                pageNumber = script[script.rfind(",")+2:len(script)-2]
+                old_url = response.url
+                new_url = old_url[:old_url.rfind("=")+1] + pageNumber
+                self.crawl(new_url, callback=self.index_page, save = response.save)            
+        for each in response.doc('td > .cpx14hei').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.neirong_title > span').text()
+        content = response.doc('.neirong_work').html()
+        url = response.url
+        site = 'http://www.cccla.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('#ctl00_cphContent_lblNewsCreateTime').text()
+
+        date = time.strptime(date_string[:11],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)        
