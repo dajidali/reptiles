@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 09:20:34
+# Project: 70_cooperate
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.ccoop.org.cn/Gonggao.asp?ClassID=27','0700101'],#通知公告
+            ['http://www.ccoop.org.cn/News.asp?ClassID=7','0700102'],#行业信息
+            ['http://www.ccoop.org.cn/News.asp?ClassID=2','0700103'],#协会动态
+            ['http://www.ccoop.org.cn/News.asp?ClassID=15','0700104'],#会员动态
+            ['http://www.ccoop.org.cn/News.asp?ClassID=3','0700105'],#政策法规
+            ['http://www.ccoop.org.cn/News.asp?ClassID=38','0700106'],#品牌管理
+            ['http://www.ccoop.org.cn/News.asp?ClassID=49','0700107'],#品牌推荐
+            ['http://www.ccoop.org.cn/News.asp?ClassID=39','0700108'],#信息化
+            ['http://www.ccoop.org.cn/News.asp?ClassID=42','0700109'],#住宿与餐饮
+            ['http://www.ccoop.org.cn/News.asp?ClassID=44','0700110'],#展会信息
+            ['http://www.ccoop.org.cn/News.asp?ClassID=6','0700111'],#数据调查
+            ['http://www.ccoop.org.cn/News.asp?ClassID=47','0700112'],#曝光台
+            ['http://www.ccoop.org.cn/News.asp?ClassID=13','0700113'],#专家彗眼
+            ['http://www.ccoop.org.cn/News.asp?ClassID=45','0700114'],#基地建设
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.ccoop.org.cn/Gonggao.asp?ClassID=27', callback=self.index_page, save='0710101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.STYLE25').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        for each in response.doc('td td td td td > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.xdctitle').text()
+        content = response.doc('.xdcontents').html()
+        url = response.url
+        site = 'http://www.ccoop.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.xdctitles td').text()
+
+        date = time.strptime(date_string[len(date_string)-18:len(date_string)-10],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)             
