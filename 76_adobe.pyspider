@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-17 15:13:09
+# Project: 76_adobe
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cbtia.com/news/InfoList.asp?btype=16&stype=5','0760101'],#	行业新闻
+            ['http://www.cbtia.com/news/InfoList.asp?btype=16&stype=6','0760102'],#	企业动态
+            ['http://www.cbtia.com/news/InfoList.asp?btype=16&stype=7','0760103'],#	科技知识
+            ['http://www.cbtia.com/news/InfoList.asp?btype=16&stype=9','0760104'],#	海外纵横
+            ['http://www.cbtia.com/news/InfoList.asp?btype=16&stype=10','0760105'],#人物访谈
+            ['http://www.cbtia.com/jingji/index.asp?btype=17&stype=15','0760201'],#统计报表
+            ['http://www.cbtia.com/jingji/index.asp?btype=17&stype=16','0760202'],#分析报告
+            ['http://www.cbtia.com/mach/infolist.asp?btype=20&stype=21','0760301'],#企业之窗
+            ['http://www.cbtia.com/mach/infolist.asp?btype=16&stype=7','0760302'],#科技知识
+            ['http://www.cbtia.com/zhanghui/listitem.asp?btype=18&stype=18','0760401'],#展会信息
+            ['http://www.cbtia.com/fagui/listnews.asp?btype=16&stype=12','0760501'],#行业标准
+            ['http://www.cbtia.com/fagui/listnews.asp?btype=16&stype=8','0760502'],#政策法规
+            ['http://www.cbtia.com/fagui/listnews.asp?btype=16&stype=14','0760503'],#专利技术
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        
+        #self.crawl('http://www.cbtia.com/news/InfoList.asp?btype=16&stype=5', callback=self.index_page, save='0760101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('a.news141').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        for each in response.doc('td td > table a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.n_title').text()
+        content = response.doc('.news141').html()
+        url = response.url
+        site = 'http://www.cbtia.com/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+
+        date_string = response.doc('.mid_border_info td > a').parent().text()
+        print(date_string)
+        date = time.strptime(date_string[date_string.find('[')+1:date_string.find(']')-1],'%Y/%m/%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
