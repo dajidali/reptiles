@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-18 08:42:44
+# Project: 79_recycl
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+        urls=[
+            ['http://www.crra.org.cn/html/tongzhi/','0790101'],#通知公告
+            ['http://www.crra.org.cn/html/zhanhui/','0790201'],#行业展会
+            ['http://www.crra.org.cn/html/zhengce/fagui/','0790301'],#政策法规
+            ['http://www.crra.org.cn/html/hangye/','0790401'],#地区热点
+            ['http://www.crra.org.cn/html/luntan/','0790501'],#百家论坛
+            ['http://www.crra.org.cn/html/work/qiye/','0790601'],#企业动态
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+    def on_start(self):
+        self.crawl('http://www.crra.org.cn/html/tongzhi/', callback=self.index_page, save='0790101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.text-c > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.clear > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h1').text()
+        content = response.doc('.con').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('h3').text()
+
+        date = time.strptime(date_string[date_string.find('发表时间：')+5:date_string.find('发表时间：')+15],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
