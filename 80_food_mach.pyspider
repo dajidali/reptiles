@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-18 09:30:52
+# Project: 80_food_mach
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=8','0800101'],#协会动态
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=9','0800102'],#协会公告
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=11','0800103'],#分会动态
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=10','0800104'],#地方资讯
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=13','0800201'],#国内动态
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=14','0800202'],#国际动态
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=15','0800203'],#政策法规
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=31','0800301'],#国际展览
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=32','0800302'],#国内展览
+            ['http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=62','0800303'],#自办展
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        
+        #self.crawl('http://www.chinafpma.org/index.php?m=content&c=index&a=lists&catid=8', callback=self.index_page, save='0800101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.fye > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('li > h3 > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.wzname').text()
+        content = response.doc('.xqleft').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.wzcs > span').text()
+
+        date = time.strptime(date_string[4:14],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)      
