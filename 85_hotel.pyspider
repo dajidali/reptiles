@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-19 14:13:08
+# Project: 85_hotel
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinahotel.org.cn/forward/findContent.do?id=b92ba90011ef4de3a786d86fbe161f20&childMId1=b92ba90011ef4de3a786d86fbe161f20&moduleId=b92ba90011ef4de3a786d86fbe161f20&nowPage=1&pageSize=10000','0850101'],#协会动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=b92ba90011ef4de3a786d86fbe161f20&childMId1=c1145311a82b4ae68adc2c4a5de78e2d&moduleId=c1145311a82b4ae68adc2c4a5de78e2d&nowPage=1&pageSize=10000','0850102'],#最新活动
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=b92ba90011ef4de3a786d86fbe161f20&childMId1=5df5e592773f4769adbf98ac31ed172e&moduleId=5df5e592773f4769adbf98ac31ed172e&nowPage=1&pageSize=10000','0850103'],#公告公示
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=b92ba90011ef4de3a786d86fbe161f20&childMId1=fc93ba41de5b4b6fb2ffed1c0e49f3af&moduleId=fc93ba41de5b4b6fb2ffed1c0e49f3af&nowPage=1&pageSize=10000','0850104'],#活动回顾
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=6e873b75dcc247fabcf52a35c34957e4&childMId1=d3970524d7c44fb2b9f3a7647bf75226&moduleId=d3970524d7c44fb2b9f3a7647bf75226&nowPage=1&pageSize=10000','0850201'],#饭店文化节
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=6e873b75dcc247fabcf52a35c34957e4&childMId1=4412d638be2545df94a93b66aca9038c&moduleId=4412d638be2545df94a93b66aca9038c&nowPage=1&pageSize=10000','0850202'],#中国美食节
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=6e873b75dcc247fabcf52a35c34957e4&childMId1=13a6c531f8c0410b889de5af98861ff1&moduleId=13a6c531f8c0410b889de5af98861ff1&nowPage=1&pageSize=10000','0850203'],#职业技能竞赛
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=485fa968365f443cb6df8cfe0d8fc355&childMId1=4fe7b5670f324eeb93f5a1916a1e87a2&moduleId=4fe7b5670f324eeb93f5a1916a1e87a2&nowPage=1&pageSize=10000','0850301'],#会员风采
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=485fa968365f443cb6df8cfe0d8fc355&childMId1=b4174ad270a64c25984ff355e914a7e1&moduleId=b4174ad270a64c25984ff355e914a7e1&nowPage=1&pageSize=10000','0850302'],#副会长单位
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=40601c439f7e42bf8213a0b69f2962d7&childMId1=5c096a78905c443aa3b2a4bdf725431c&moduleId=5c096a78905c443aa3b2a4bdf725431c&nowPage=1&pageSize=10000','0850401'],#工作动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=610146e89ae54463a84a8e8feb8561a3&childMId1=b7ee76e89a0c4b9e8ff13b9da440f36b&moduleId=b7ee76e89a0c4b9e8ff13b9da440f36b&nowPage=1&pageSize=10000','0850501'],#工作动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=4a41851c14184c9495f3aad314fc4290&childMId1=c8e3a6a76dd445dea72b2dead7f082ae&moduleId=c8e3a6a76dd445dea72b2dead7f082ae&nowPage=1&pageSize=10000','0850601'],#权威论坛
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=4a41851c14184c9495f3aad314fc4290&childMId1=205cbdec9d464c6d8f13b69746ee8212&moduleId=205cbdec9d464c6d8f13b69746ee8212&nowPage=1&pageSize=10000','0850602'],#行业标准
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=4a41851c14184c9495f3aad314fc4290&childMId1=4e28ce0583794d08a63c4036d336f5cc&moduleId=4e28ce0583794d08a63c4036d336f5cc&nowPage=1&pageSize=10000','0850603'],#行业报告
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=593bf8147a704fffaf38d9c6f54fd52f&childMId1=ee900920c914494382633fde4bf4c44a&moduleId=ee900920c914494382633fde4bf4c44a&nowPage=1&pageSize=10000','0850701'],#考评动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=50d3c43f63f4450fbff55203fce204a4&childMId1=5e36138fa9df4516ac2ac83265316c3e&moduleId=5e36138fa9df4516ac2ac83265316c3e&nowPage=1&pageSize=10000','0850801'],#工作动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=4a5e384618434972be6dc34a7b6487e1&childMId1=48e365d8fb51421fa671a0538e8e0e58&moduleId=48e365d8fb51421fa671a0538e8e0e58&nowPage=1&pageSize=10000','0850901'],#工作动态
+            ['http://www.chinahotel.org.cn/forward/enterSecondDary.do?id=f73eedfffa824b7ba2ae9b3898a0d2c2&childMId1=c5d8d1df58a8482e93387b26e540dbb2&moduleId=c5d8d1df58a8482e93387b26e540dbb2&nowPage=1&pageSize=10000','0851001'],#最新资讯
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.chinahotel.org.cn/forward/findContent.do?id=b92ba90011ef4de3a786d86fbe161f20&childMId1=b92ba90011ef4de3a786d86fbe161f20&moduleId=b92ba90011ef4de3a786d86fbe161f20&nowPage=1&pageSize=10000', callback=self.index_page, save='0950101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('a').items():
+            old_url = each.attr.href
+            new_url = 'http://www.chinahotel.org.cn/forward/findContent.do?' + old_url[old_url.find('?')-1:len(old_url)]
+            self.crawl(new_url, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.content_name').text()
+        content = response.doc('body > div').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('div > div').text()
+
+        date = time.strptime(date_string[date_string.find('时间：')+3:date_string.find('时间：')+13],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)       
