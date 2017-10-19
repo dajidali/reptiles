@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-19 11:34:43
+# Project: 83_mushroom
+
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.cefa.org.cn/Category_40/Index.aspx','0830101'],#政策法规
+            ['http://www.cefa.org.cn/Category_14/Index.aspx','0830201'],#各地菌业
+            ['http://www.cefa.org.cn/Category_15/Index.aspx','0830301'],#行业资讯
+            ['http://www.cefa.org.cn/Category_16/Index.aspx','0830401'],#菌业活动
+            ['http://www.cefa.org.cn/Category_17/Index.aspx','0830501'],#服务指导
+            ['http://www.cefa.org.cn/Category_19/Index.aspx','0830601'],#协会工作
+            ['http://www.cefa.org.cn/Category_45/Index.aspx','0830701'],#食用菌之乡
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        self.crawl('http://www.cefa.org.cn/Category_14/Index.aspx', callback=self.index_page, save='0830101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('span > span > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.r_box_middle li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.title > font').text()
+        content = response.doc('.cc_middle').html()
+        url = response.url
+        site = 'http://www.zxsx.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.time > span').text()
+
+        date = time.strptime(date_string[date_string.find('发布时间：')+5:date_string.find('发布时间：')+16],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)     
