@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-18 09:48:23
+# Project: 81_quality
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.chinatt315.org.cn/zlgl/2list.aspx','0810202'],#质量统计分析
+            ['http://www.chinatt315.org.cn/zlgl/3list.aspx','0810203'],#质量诚信与产品防伪
+            ['http://www.chinatt315.org.cn/zlgl/4list.aspx','0810204'],#质量管理与品牌建设
+            ['http://www.chinatt315.org.cn/zlgl/5list.aspx','0810205'],#质量责任与设备监理
+            ['http://www.chinatt315.org.cn/zlgl/6list.aspx','0810206'],#质量培训与质量专业职业资格
+            ['http://www.chinatt315.org.cn/zlgl/7list.aspx','0810207'],#国际质量动态与研究
+            ['http://www.chinatt315.org.cn/tbgz/1list.aspx','0810301'],#在线访谈
+            ['http://www.chinatt315.org.cn/tbgz/2list.aspx','0810302'],#特别关注
+            ['http://www.chinatt315.org.cn/tbgz/3list.aspx','0810303'],#每周质量报告
+            ['http://www.chinatt315.org.cn/djdt/1list.aspx','0810401'],#打假行动
+            ['http://www.chinatt315.org.cn/djdt/2list.aspx','0810402'],#专项打假
+            ['http://www.chinatt315.org.cn/tsfk/3list.aspx','0810501'],#消费警示
+            ['http://www.chinatt315.org.cn/tsfk/4list.aspx','0810502'],#打假维权
+            ['http://www.chinatt315.org.cn/tsfk/5list.aspx','0810503'],#消费信息
+            ['http://www.chinatt315.org.cn/tsfk/6list.aspx','0810504'],#质量监督
+            ['http://www.chinatt315.org.cn/tsfk/7list.aspx','0810505'],#市场准入
+            ['http://www.chinatt315.org.cn/tsfk/1list.aspx','0810506'],#投诉
+            ['http://www.chinatt315.org.cn/tsfk/2list.aspx','0810507'],#反馈
+            ['http://www.chinatt315.org.cn/news/1list.aspx','0810601'],#质检快讯            
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+        
+        self.crawl('http://www.chinatt315.org.cn/zlgl/7list.aspx', callback=self.index_page, save='0810101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        view_state = response.doc('div').parent().find("input").eq(0).attr.value
+        view_state_gene = response.doc('div').parent().find("input").eq(1).attr.value
+        view_state_encry = response.doc('div').parent().find("input").eq(2).attr.value
+        event_valid = response.doc('div').parent().find("input").eq(3).attr.value
+        data = {'__EVENTTARGET':'dpNews$ctl02$ctl00','__VIEWSTATE':view_state,'__VIEWSTATEGENERATOR':view_state_gene,'__VIEWSTATEENCRYPTED':view_state_encry,'__EVENTVALIDATION':view_state_encry,'__EVENTVALIDATION':event_valid}
+        for each in response.doc('.pageStyle').items():
+            self.crawl(response.url, data=data, method="POST", callback=self.index_page, save = response.save)
+        for each in response.doc('.tsfk_cc a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+        for each in response.doc('#newsList a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('h1').text()
+        content = response.doc('#container').html()
+        url = response.url
+        site = 'http://www.chinatt315.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.newssource').text()
+
+        date = time.strptime(date_string[:11],'%Y年%m月%d日')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+    
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)         
