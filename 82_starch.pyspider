@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-10-19 11:07:23
+# Project: 82_starch
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://www.siacn.org/index.php?optionid=977','0820101'],#	重大活动
+            ['http://www.siacn.org/index.php?optionid=978','0820102'],#	对外交流
+            ['http://www.siacn.org/index.php?optionid=979','0820103'],#	行业新闻
+            ['http://www.siacn.org/index.php?optionid=980','0820104'],#	环境保护
+            ['http://www.siacn.org/index.php?optionid=981','0820105'],#	协会新闻
+            ['http://www.siacn.org/index.php?optionid=1073','0820106'],#	行业数据
+            ['http://www.siacn.org/index.php?optionid=982','0820201'],#	政策法规
+            ['http://www.siacn.org/index.php?optionid=983','0820202'],#	今日看点
+            ['http://www.siacn.org/index.php?optionid=984','0820203'],#	国家标准
+            ['http://www.siacn.org/index.php?optionid=985','0820204'],#	行业标准
+            ['http://www.siacn.org/index.php?optionid=986','0820205'],#	药典标准
+            ['http://www.siacn.org/index.php?optionid=987','0820206'],#	国外标准
+            ['http://www.siacn.org/index.php?optionid=988','0820207'],#	其他标准
+            ['http://www.siacn.org/index.php?optionid=989','0820208'],#	相关检测内容
+            ['http://www.siacn.org/index.php?optionid=1000','0820301'],#	展会动态
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://www.siacn.org/index.php?optionid=977', callback=self.index_page, save='0490101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.RPG03_01 a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.RST12_32 a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('.body h3').text()
+        content = response.doc('.body > div').html()
+        url = response.url
+        site = 'http://www.siacn.org/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.source li').text()
+
+        date = time.strptime(date_string[date_string.find('时间:')+4:date_string.find('时间:')+14],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)             
