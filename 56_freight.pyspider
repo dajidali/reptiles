@@ -1,0 +1,70 @@
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+# Created on 2017-11-03 09:53:41
+# Project: 56_freight
+
+from pyspider.libs.base_handler import *
+import pyspider.libs.xxtools as tools
+from pyspider.database.mysql.mysqldb import MySql
+import time
+
+class Handler(BaseHandler):
+    crawl_config = {
+        'itag':'v1'
+    }
+
+    @every(minutes=24 * 60)
+    def on_start(self):
+        urls=[
+            ['http://118.26.162.39:801/xhjs/xhdt/','0560101'],#	协会动态
+            ['http://118.26.162.39:801/qylb/qydt/','0560201'],#	企业动态
+            ['http://118.26.162.39:801/fwqy/cjwd/','0560301'],#	常见问答
+            ['http://118.26.162.39:801/fwqy/xyjl/','0560302'],#	行业交流
+            ['http://118.26.162.39:801/fwqy/xymtxx/','0560303'],#	行业媒体信息
+            ['http://118.26.162.39:801/gjhqyjlhz/fiatazl/','0560401'],#	TIATA专栏
+            ['http://118.26.162.39:801/gjhqyjlhz/zwjl/','0560402'],#	中外交流
+            ['http://118.26.162.39:801/gjhqyjlhz/zwhdwlqyqthwcazl/','0560403'],#	WCA专栏
+            ['http://118.26.162.39:801/gjhqyjlhz/zyhz/','0560404'],#	中亚合作
+            ['http://118.26.162.39:801/gjhqyjlhz/lasd/','0560405'],#	两岸四地
+        ]        
+        for each in urls:
+            self.crawl(each[0], callback=self.index_page, save=each[1])    
+
+        #self.crawl('http://118.26.162.39:801/xhjs/xhdt/', callback=self.index_page, save='0560101')
+
+    @config(age=10 * 24 * 60 * 60)
+    def index_page(self, response):
+        for each in response.doc('.page_line > span > a').items():
+            self.crawl(each.attr.href, callback=self.index_page, save = response.save)
+        for each in response.doc('.hyznlmy li > a').items():
+            self.crawl(each.attr.href, callback=self.detail_page, save = response.save)
+
+    @config(priority=2)
+    def detail_page(self, response):
+        title = response.doc('font').text()
+        content = response.doc('#articleContnet').html()
+        url = response.url
+        site = 'http://www.cifa.org.cn/'
+        content_dom = tools.ext_cont(url, content)
+        pagekey = tools.get_md5(title+url)
+        date_string = response.doc('.article_info').text()
+
+        date = time.strptime('2016-' + date_string[date_string.find('[')+1:date_string.find(']')],'%Y-%m-%d')
+        date = time.strftime('%Y%m%d',date)        
+        kind = response.save
+        return {
+            "pagekey": pagekey,
+            "url": url,
+            "site": site,
+            "title": title,
+            "content_dom":content_dom,
+            "cdate": date,
+            "kind":kind
+        }
+
+    def on_result(self, result):
+        print(result)
+        if not result or not result['title']:
+            return
+        sql = MySql()
+        sql.into('BUSI_CREDIT_INFO',**result)    
